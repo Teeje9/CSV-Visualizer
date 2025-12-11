@@ -135,6 +135,17 @@ function OutlierItem({ column, outliers }: { column: string; outliers: Outlier[]
 function StatRow({ stat }: { stat: NumericStats }) {
   const [expanded, setExpanded] = useState(false);
   
+  const formatWithUnit = (value: number) => {
+    const formatted = formatNumber(value);
+    if (stat.unit === '$' || stat.unit === '€' || stat.unit === '£') {
+      return `${stat.unit}${formatted}`;
+    }
+    if (stat.unit === '%') {
+      return `${formatted}%`;
+    }
+    return formatted;
+  };
+  
   return (
     <div className="border-b border-border/50 last:border-0">
       <button
@@ -145,7 +156,7 @@ function StatRow({ stat }: { stat: NumericStats }) {
         <span className="text-sm font-medium truncate">{stat.column}</span>
         <div className="flex items-center gap-3 shrink-0">
           <span className="font-mono text-sm text-muted-foreground">
-            {formatNumber(stat.mean)} avg
+            {formatWithUnit(stat.mean)} avg
           </span>
           {expanded ? (
             <ChevronDown className="w-4 h-4 text-muted-foreground" />
@@ -159,15 +170,15 @@ function StatRow({ stat }: { stat: NumericStats }) {
         <div className="grid grid-cols-3 gap-x-4 gap-y-1 pb-3 pl-1 text-xs">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Min</span>
-            <span className="font-mono">{formatNumber(stat.min)}</span>
+            <span className="font-mono">{formatWithUnit(stat.min)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Max</span>
-            <span className="font-mono">{formatNumber(stat.max)}</span>
+            <span className="font-mono">{formatWithUnit(stat.max)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Median</span>
-            <span className="font-mono">{formatNumber(stat.median)}</span>
+            <span className="font-mono">{formatWithUnit(stat.median)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Std Dev</span>
@@ -175,11 +186,11 @@ function StatRow({ stat }: { stat: NumericStats }) {
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Sum</span>
-            <span className="font-mono">{formatNumber(stat.total)}</span>
+            <span className="font-mono">{formatWithUnit(stat.total)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Mean</span>
-            <span className="font-mono">{formatNumber(stat.mean)}</span>
+            <span className="font-mono">{formatWithUnit(stat.mean)}</span>
           </div>
         </div>
       )}

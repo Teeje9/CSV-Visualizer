@@ -1,10 +1,43 @@
 import { z } from "zod";
 
-export type ColumnType = "numeric" | "categorical" | "date" | "boolean" | "text";
+export type BaseType = "numeric" | "categorical" | "temporal" | "boolean" | "text";
+
+export type SemanticType = 
+  | "currency" 
+  | "percentage" 
+  | "count" 
+  | "measurement" 
+  | "rate"
+  | "id"
+  | "timestamp"
+  | "date"
+  | "year"
+  | "email"
+  | "url"
+  | "phone"
+  | "zip_code"
+  | "country"
+  | "state"
+  | "city"
+  | "latitude"
+  | "longitude"
+  | "name"
+  | "category"
+  | "status"
+  | "boolean"
+  | "generic_numeric"
+  | "generic_text";
 
 export const columnInfoSchema = z.object({
   name: z.string(),
-  type: z.enum(["numeric", "categorical", "date", "boolean", "text"]),
+  baseType: z.enum(["numeric", "categorical", "temporal", "boolean", "text"]),
+  semanticType: z.string(),
+  format: z.string().optional(),
+  unit: z.string().optional(),
+  cardinality: z.number(),
+  missingCount: z.number(),
+  missingPercent: z.number(),
+  uniquePercent: z.number(),
   sampleValues: z.array(z.string()),
 });
 
@@ -12,6 +45,7 @@ export type ColumnInfo = z.infer<typeof columnInfoSchema>;
 
 export const numericStatsSchema = z.object({
   column: z.string(),
+  semanticType: z.string(),
   mean: z.number(),
   median: z.number(),
   min: z.number(),
@@ -19,6 +53,7 @@ export const numericStatsSchema = z.object({
   stdDev: z.number(),
   total: z.number(),
   count: z.number(),
+  unit: z.string().optional(),
 });
 
 export type NumericStats = z.infer<typeof numericStatsSchema>;
@@ -55,7 +90,7 @@ export const outlierSchema = z.object({
 export type Outlier = z.infer<typeof outlierSchema>;
 
 export const insightSchema = z.object({
-  type: z.enum(["trend", "correlation", "statistic", "outlier", "pattern"]),
+  type: z.enum(["trend", "correlation", "statistic", "outlier", "pattern", "quality", "summary"]),
   icon: z.string(),
   title: z.string(),
   description: z.string(),
@@ -66,14 +101,27 @@ export type Insight = z.infer<typeof insightSchema>;
 
 export const chartConfigSchema = z.object({
   id: z.string(),
-  type: z.enum(["line", "bar", "scatter", "histogram"]),
+  type: z.enum(["line", "bar", "scatter", "histogram", "area", "pie"]),
   title: z.string(),
   xAxis: z.string(),
   yAxis: z.string().optional(),
   data: z.array(z.record(z.union([z.string(), z.number()]))),
+  priority: z.number().optional(),
 });
 
 export type ChartConfig = z.infer<typeof chartConfigSchema>;
+
+export const dataQualitySchema = z.object({
+  totalRows: z.number(),
+  duplicateRows: z.number(),
+  columnsWithMissing: z.array(z.object({
+    column: z.string(),
+    missingCount: z.number(),
+    missingPercent: z.number(),
+  })),
+});
+
+export type DataQuality = z.infer<typeof dataQualitySchema>;
 
 export const analysisResultSchema = z.object({
   fileName: z.string(),
@@ -86,6 +134,7 @@ export const analysisResultSchema = z.object({
   outliers: z.array(outlierSchema),
   insights: z.array(insightSchema),
   charts: z.array(chartConfigSchema),
+  dataQuality: dataQualitySchema.optional(),
 });
 
 export type AnalysisResult = z.infer<typeof analysisResultSchema>;
