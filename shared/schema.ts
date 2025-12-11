@@ -43,6 +43,17 @@ export const trendSchema = z.object({
 
 export type Trend = z.infer<typeof trendSchema>;
 
+export const outlierSchema = z.object({
+  column: z.string(),
+  value: z.number(),
+  index: z.number(),
+  type: z.enum(["high", "low"]),
+  zScore: z.number(),
+  description: z.string(),
+});
+
+export type Outlier = z.infer<typeof outlierSchema>;
+
 export const insightSchema = z.object({
   type: z.enum(["trend", "correlation", "statistic", "outlier", "pattern"]),
   icon: z.string(),
@@ -72,6 +83,7 @@ export const analysisResultSchema = z.object({
   numericStats: z.array(numericStatsSchema),
   correlations: z.array(correlationSchema),
   trends: z.array(trendSchema),
+  outliers: z.array(outlierSchema),
   insights: z.array(insightSchema),
   charts: z.array(chartConfigSchema),
 });

@@ -5,6 +5,7 @@ import type {
   NumericStats, 
   Correlation, 
   Trend, 
+  Outlier,
   Insight, 
   ChartConfig,
   AnalysisResult 
@@ -158,6 +159,51 @@ function calculateCorrelation(col1: string, values1: number[], col2: string, val
   }
 }
 
+function detectOutliers(column: string, rows: Record<string, string>[]): Outlier[] {
+  const valuesWithIndex: { value: number; originalIndex: number }[] = [];
+  
+  for (let i = 0; i < rows.length; i++) {
+    const rawValue = (rows[i][column] || '').replace(/,/g, '');
+    const num = parseFloat(rawValue);
+    if (!isNaN(num) && isFinite(num)) {
+      valuesWithIndex.push({ value: num, originalIndex: i });
+    }
+  }
+
+  if (valuesWithIndex.length < 5) return [];
+
+  const values = valuesWithIndex.map(v => v.value);
+  const mean = ss.mean(values);
+  const stdDev = ss.standardDeviation(values);
+  
+  if (stdDev === 0) return [];
+
+  const outliers: Outlier[] = [];
+  const threshold = 2.5;
+
+  for (const { value, originalIndex } of valuesWithIndex) {
+    const zScore = (value - mean) / stdDev;
+
+    if (Math.abs(zScore) >= threshold) {
+      const type = zScore > 0 ? 'high' : 'low';
+      const description = type === 'high'
+        ? `Value ${value.toFixed(2)} in ${column} at row ${originalIndex + 1} is unusually high (${zScore.toFixed(1)} standard deviations above average)`
+        : `Value ${value.toFixed(2)} in ${column} at row ${originalIndex + 1} is unusually low (${Math.abs(zScore).toFixed(1)} standard deviations below average)`;
+
+      outliers.push({
+        column,
+        value,
+        index: originalIndex,
+        type,
+        zScore: Math.abs(zScore),
+        description
+      });
+    }
+  }
+
+  return outliers.sort((a, b) => b.zScore - a.zScore).slice(0, 10);
+}
+
 function detectTrend(dateCol: string, valueCol: string, rows: Record<string, string>[]): Trend | null {
   const values = getNumericValues(rows, valueCol);
   if (values.length < 5) return null;
@@ -203,7 +249,8 @@ function generateInsights(
   columns: ColumnInfo[],
   numericStats: NumericStats[],
   correlations: Correlation[],
-  trends: Trend[]
+  trends: Trend[],
+  outliers: Outlier[]
 ): Insight[] {
   const insights: Insight[] = [];
 
@@ -255,8 +302,37 @@ function generateInsights(
     }
   }
 
+  const outliersByColumn = new Map<string, Outlier[]>();
+  for (const outlier of outliers) {
+    const existing = outliersByColumn.get(outlier.column) || [];
+    existing.push(outlier);
+    outliersByColumn.set(outlier.column, existing);
+  }
+
+  for (const [column, columnOutliers] of outliersByColumn) {
+    const highCount = columnOutliers.filter(o => o.type === 'high').length;
+    const lowCount = columnOutliers.filter(o => o.type === 'low').length;
+    
+    let description = `Found ${columnOutliers.length} outlier${columnOutliers.length !== 1 ? 's' : ''} in ${column}`;
+    if (highCount > 0 && lowCount > 0) {
+      description += ` (${highCount} unusually high, ${lowCount} unusually low)`;
+    } else if (highCount > 0) {
+      description += ` with unusually high values`;
+    } else {
+      description += ` with unusually low values`;
+    }
+    description += '. These data points may warrant further investigation.';
+
+    insights.push({
+      type: 'outlier',
+      icon: 'zap',
+      title: `Outliers Detected in ${column}`,
+      description,
+      importance: columnOutliers.some(o => o.zScore > 3) ? 'high' : 'medium'
+    });
+  }
+
   for (const stat of numericStats) {
-    const range = stat.max - stat.min;
     const cv = stat.stdDev / Math.abs(stat.mean || 1);
 
     if (cv > 1) {
@@ -268,19 +344,9 @@ function generateInsights(
         importance: 'medium'
       });
     }
-
-    if (stat.max > stat.mean + 3 * stat.stdDev) {
-      insights.push({
-        type: 'outlier',
-        icon: 'zap',
-        title: `Potential Outliers in ${stat.column}`,
-        description: `The maximum value (${stat.max.toFixed(2)}) is unusually high compared to the average (${stat.mean.toFixed(2)}).`,
-        importance: 'medium'
-      });
-    }
   }
 
-  return insights.slice(0, 8);
+  return insights.slice(0, 10);
 }
 
 function generateCharts(
@@ -465,7 +531,13 @@ export function analyzeData(parsedData: ParsedData, fileName: string): AnalysisR
     }
   }
 
-  const insights = generateInsights(columns, numericStats, correlations, trends);
+  const outliers: Outlier[] = [];
+  for (const numCol of numericColumns) {
+    const columnOutliers = detectOutliers(numCol.name, rows);
+    outliers.push(...columnOutliers);
+  }
+
+  const insights = generateInsights(columns, numericStats, correlations, trends, outliers);
   const charts = generateCharts(columns, rows);
 
   return {
@@ -476,6 +548,7 @@ export function analyzeData(parsedData: ParsedData, fileName: string): AnalysisR
     numericStats,
     correlations: correlations.slice(0, 5),
     trends,
+    outliers,
     insights,
     charts
   };

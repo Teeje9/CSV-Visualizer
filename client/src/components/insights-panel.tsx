@@ -7,12 +7,13 @@ import {
   Lightbulb,
   Zap,
   Target,
-  FileText
+  FileText,
+  AlertTriangle
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import type { AnalysisResult, NumericStats, Insight, Correlation, Trend } from "@shared/schema";
+import type { AnalysisResult, NumericStats, Insight, Correlation, Trend, Outlier } from "@shared/schema";
 
 interface InsightsPanelProps {
   result: AnalysisResult;
@@ -175,6 +176,54 @@ function TrendsSection({ trends }: { trends: Trend[] }) {
   );
 }
 
+function OutliersSection({ outliers }: { outliers: Outlier[] }) {
+  if (outliers.length === 0) return null;
+
+  const groupedByColumn = outliers.reduce((acc, outlier) => {
+    if (!acc[outlier.column]) acc[outlier.column] = [];
+    acc[outlier.column].push(outlier);
+    return acc;
+  }, {} as Record<string, Outlier[]>);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="w-5 h-5 text-muted-foreground" />
+        <h3 className="font-medium text-lg">Outliers Detected</h3>
+      </div>
+      
+      <div className="space-y-3">
+        {Object.entries(groupedByColumn).map(([column, columnOutliers]) => (
+          <div key={column} className="p-3 rounded-lg bg-muted/50 border border-border">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap className="w-4 h-4 text-yellow-500" />
+              <span className="text-sm font-medium">{column}</span>
+              <Badge variant="secondary" className="text-xs">
+                {columnOutliers.length} outlier{columnOutliers.length !== 1 ? 's' : ''}
+              </Badge>
+            </div>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {columnOutliers.slice(0, 5).map((outlier, i) => (
+                <Badge 
+                  key={i} 
+                  variant={outlier.type === 'high' ? 'default' : 'secondary'}
+                  className="font-mono text-xs"
+                  data-testid={`outlier-${column}-${i}`}
+                >
+                  {outlier.type === 'high' ? 'High' : 'Low'}: {formatNumber(outlier.value)}
+                </Badge>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Values more than 2.5 standard deviations from the mean
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function InsightsPanel({ result }: InsightsPanelProps) {
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -212,6 +261,10 @@ export function InsightsPanel({ result }: InsightsPanelProps) {
       <TrendsSection trends={result.trends} />
       
       {result.trends.length > 0 && <Separator />}
+
+      <OutliersSection outliers={result.outliers || []} />
+      
+      {(result.outliers?.length || 0) > 0 && <Separator />}
       
       <CorrelationsSection correlations={result.correlations} />
       

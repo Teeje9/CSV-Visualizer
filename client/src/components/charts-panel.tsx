@@ -1,3 +1,4 @@
+import { useRef, useCallback } from "react";
 import { 
   LineChart, 
   Line, 
@@ -14,7 +15,8 @@ import {
 } from "recharts";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { BarChart3, TrendingUp, Circle, BarChart2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { BarChart3, TrendingUp, Circle, BarChart2, Download } from "lucide-react";
 import type { ChartConfig } from "@shared/schema";
 
 interface ChartsPanelProps {
@@ -221,6 +223,55 @@ function HistogramComponent({ config }: { config: ChartConfig }) {
 }
 
 function ChartCard({ config }: { config: ChartConfig }) {
+  const chartRef = useRef<HTMLDivElement>(null);
+
+  const handleDownload = useCallback(async () => {
+    if (!chartRef.current) return;
+    
+    const svgElement = chartRef.current.querySelector('svg');
+    if (!svgElement) return;
+
+    const clonedSvg = svgElement.cloneNode(true) as SVGSVGElement;
+    clonedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    
+    const svgData = new XMLSerializer().serializeToString(clonedSvg);
+    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const img = new Image();
+    const url = URL.createObjectURL(svgBlob);
+    
+    img.onload = () => {
+      const scale = 2;
+      canvas.width = svgElement.clientWidth * scale;
+      canvas.height = svgElement.clientHeight * scale;
+      ctx.scale(scale, scale);
+      
+      const isDark = document.documentElement.classList.contains('dark');
+      ctx.fillStyle = isDark ? '#121212' : '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, svgElement.clientWidth, svgElement.clientHeight);
+      
+      const pngUrl = canvas.toDataURL('image/png');
+      const downloadLink = document.createElement('a');
+      downloadLink.href = pngUrl;
+      downloadLink.download = `${config.title.replace(/\s+/g, '_')}.png`;
+      downloadLink.click();
+      
+      URL.revokeObjectURL(url);
+    };
+    
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      console.error('Failed to load chart image for export');
+    };
+    
+    img.src = url;
+  }, [config.title]);
+
   const renderChart = () => {
     switch (config.type) {
       case 'line': return <LineChartComponent config={config} />;
@@ -236,10 +287,20 @@ function ChartCard({ config }: { config: ChartConfig }) {
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <CardTitle className="text-base font-medium">{config.title}</CardTitle>
-          <ChartTypeLabel type={config.type} />
+          <div className="flex items-center gap-2">
+            <ChartTypeLabel type={config.type} />
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleDownload}
+              data-testid={`button-download-${config.id}`}
+            >
+              <Download className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </CardHeader>
-      <CardContent className="pt-4">
+      <CardContent className="pt-4" ref={chartRef}>
         {renderChart()}
       </CardContent>
     </Card>
