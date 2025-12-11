@@ -718,6 +718,15 @@ export function analyzeData(parsedData: ParsedData, fileName: string): AnalysisR
   const charts = generateSmartCharts(columns, rows);
   const insights = generateSemanticInsights(columns, numericStats, correlations, trends, outliers, dataQuality);
 
+  const rawData = rows.slice(0, 50).map(row => {
+    const cleanedRow: Record<string, string> = {};
+    for (const col of columns) {
+      const value = row[col.name] || '';
+      cleanedRow[col.name] = value.trim();
+    }
+    return cleanedRow;
+  });
+
   return {
     fileName,
     rowCount: rows.length,
@@ -729,6 +738,7 @@ export function analyzeData(parsedData: ParsedData, fileName: string): AnalysisR
     outliers,
     insights,
     charts,
-    dataQuality
+    dataQuality,
+    rawData
   };
 }

@@ -10,6 +10,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import type { AnalysisResult, NumericStats, Correlation, Trend, Outlier } from "@shared/schema";
+import { DataTable } from "./data-table";
+import { AISummary } from "./ai-summary";
+import { Separator } from "@/components/ui/separator";
 
 interface InsightsPanelProps {
   result: AnalysisResult;
@@ -223,10 +226,15 @@ export function InsightsPanel({ result }: InsightsPanelProps) {
   const hasTrends = result.trends.length > 0;
   const hasOutliers = Object.keys(outliersByColumn).length > 0;
   const hasStats = result.numericStats.length > 0;
+  const hasRawData = result.rawData && result.rawData.length > 0;
 
   return (
     <div className="p-4 md:p-5 space-y-6 h-full overflow-y-auto">
       <OverviewSection result={result} />
+      
+      <AISummary result={result} />
+
+      <Separator />
       
       {hasTrends && (
         <Section title="Trends" count={result.trends.length}>
@@ -266,6 +274,17 @@ export function InsightsPanel({ result }: InsightsPanelProps) {
             ))}
           </div>
         </Section>
+      )}
+
+      {hasRawData && (
+        <>
+          <Separator />
+          <DataTable 
+            data={result.rawData!} 
+            columns={result.columns} 
+            totalRows={result.rowCount} 
+          />
+        </>
       )}
     </div>
   );

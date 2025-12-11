@@ -135,6 +135,8 @@ export const analysisResultSchema = z.object({
   insights: z.array(insightSchema),
   charts: z.array(chartConfigSchema),
   dataQuality: dataQualitySchema.optional(),
+  rawData: z.array(z.record(z.string())).optional(),
+  aiSummary: z.string().optional(),
 });
 
 export type AnalysisResult = z.infer<typeof analysisResultSchema>;
