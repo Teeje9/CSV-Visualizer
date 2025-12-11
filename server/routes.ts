@@ -157,39 +157,26 @@ export async function registerRoutes(
         Object.entries(row).slice(0, 6).map(([k, v]) => `${k}: ${v}`).join(', ')
       ).join('\n') || '';
 
-      const prompt = `Analyze this dataset and provide a concise, insightful summary in 3-4 paragraphs. Focus on what the data reveals, patterns, and actionable insights.
+      const prompt = `You are a data analyst. Give a brief, punchy summary of this dataset in 2-3 short paragraphs (max 150 words total).
 
-Dataset: ${analysisResult.fileName}
-Rows: ${analysisResult.rowCount}, Columns: ${analysisResult.columnCount}
+Dataset: ${analysisResult.fileName} (${analysisResult.rowCount} rows, ${analysisResult.columnCount} columns)
 
-Column Types:
-${columnsSummary}
+Columns: ${columnsSummary}
 
-Statistics:
-${statsSummary}
+Stats: ${statsSummary}
 
-Trends:
-${trendsSummary}
+Trends: ${trendsSummary}
 
-Correlations:
-${correlationsSummary}
+Correlations: ${correlationsSummary}
 
-Sample Data:
-${dataSample}
+Sample: ${dataSample}
 
-Provide a natural language summary that:
-1. Describes what this dataset represents
-2. Highlights the most interesting patterns or findings
-3. Notes any data quality issues (missing data, outliers)
-4. Suggests potential uses or insights from this data
+Write like you're telling a friend what you found. Lead with the most interesting insight. Be specific with numbers. Skip obvious observations.`;
 
-Keep the summary conversational and easy to understand for non-technical users.`;
-
-      // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 800,
+        max_tokens: 350,
         temperature: 0.7,
       });
 
