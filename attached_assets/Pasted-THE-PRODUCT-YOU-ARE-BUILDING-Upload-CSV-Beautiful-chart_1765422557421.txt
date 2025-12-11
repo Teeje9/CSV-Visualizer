@@ -1,0 +1,126 @@
+THE PRODUCT YOU ARE BUILDING
+
+Upload CSV → Beautiful charts + auto-generated insights.
+
+This is literally what people want:
+	•	They don’t know how to choose chart types
+	•	They don’t know how to analyze data
+	•	They don’t want to use Excel
+	•	They want something simple + pretty
+
+This tool gives:
+	•	Automatic column detection
+	•	Line/bar/scatter charts
+	•	Summaries
+	•	Trends
+	•	Outliers
+	•	Basic correlations
+	•	“Interesting findings”
+
+Super clean. Super usable.
+
+⸻
+
+🧩 THE MVP FEATURES (You only build these first)
+
+1. CSV Upload
+	•	Accept .csv, .tsv, .xlsx (xlsx optional for v2)
+	•	Limit size (e.g., 3–5MB for v1)
+
+2. Auto Column Detection
+
+The backend classifies columns as:
+	•	numeric
+	•	categorical
+	•	date
+	•	boolean
+	•	text (ignored unless insights detect something trivial)
+
+3. Auto Chart Selection
+
+Based on column types, generate:
+	•	Line chart if (date + number)
+	•	Bar chart if (category + number)
+	•	Scatter plot if (number + number)
+	•	Histogram if (single numeric column)
+
+You can literally hardcode these rules.
+
+4. Basic Insights Engine
+
+For each numeric column:
+	•	mean
+	•	median
+	•	min/max
+	•	standard deviation
+	•	total
+	•	count
+
+For pairs of numeric columns:
+	•	correlation coefficient (Pearson’s r)
+	•	small blurb explaining the meaning (“Weak positive correlation between A and B”)
+
+For date columns:
+	•	trend detection (increasing? decreasing?)
+	•	rate of change
+	•	seasonal patterns (very simple)
+
+5. UI to display results
+
+Split screen:
+	•	Left = insights
+	•	Right = charts
+
+Make it clean, minimalist, dark theme (your vibe).
+
+⸻
+
+🔥 THE SECRET SAUCE — THE INSIGHTS TEXT
+
+This is where your product wins.
+
+You generate short, human-like summaries such as:
+	•	“Column X shows a steady upward trend over time.”
+	•	“Column Y varies heavily — expect inconsistent patterns.”
+	•	“Column Z has an unusually high peak around 2024-06.”
+	•	“There’s a weak correlation between A and B (0.21).”
+	•	“Users typically see most activity on weekends.”
+
+People LOVE when the tool “talks back.”
+
+You are basically building a mini data analyst.
+
+⸻
+
+🧱 THE TECH STACK (optimized for YOU)
+
+Frontend
+	•	React (since you know JS best)
+	•	Tailwind for styles
+	•	Recharts or Chart.js for charts
+(Recharts is cleaner and easier for MVP)
+
+Backend
+	•	Node + Express
+	•	Single endpoint for file upload
+	•	Use multer for file handling
+	•	Use papaparse or csv-parser to parse CSV
+
+Insights Logic
+
+All inside Node:
+	•	numeric detection
+	•	stats functions
+	•	correlation calculations
+	•	generate insights text from templates
+
+You do NOT need AI for v1.
+Just deterministic rules.
+
+Database (Optional for MVP)
+
+MVP doesn’t need a DB.
+
+But if you want user accounts later:
+	•	PostgreSQL (you already know it)
+	•	Store: user, uploads, insight reports, charts
