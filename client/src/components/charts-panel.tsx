@@ -10,11 +10,8 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  ResponsiveContainer,
-  Legend
+  ResponsiveContainer
 } from "recharts";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BarChart3, TrendingUp, Circle, BarChart2, Download } from "lucide-react";
 import type { ChartConfig } from "@shared/schema";
@@ -23,31 +20,20 @@ interface ChartsPanelProps {
   charts: ChartConfig[];
 }
 
-const CHART_COLORS = [
-  "hsl(217, 91%, 60%)",
-  "hsl(173, 80%, 40%)",
-  "hsl(280, 65%, 60%)",
-  "hsl(43, 95%, 50%)",
-  "hsl(340, 75%, 55%)",
-];
+const CHART_COLORS = {
+  primary: "hsl(217, 91%, 60%)",
+  secondary: "hsl(173, 80%, 40%)",
+  tertiary: "hsl(280, 65%, 60%)",
+};
 
 function getChartIcon(type: string) {
   switch (type) {
-    case 'line': return <TrendingUp className="w-4 h-4" />;
-    case 'bar': return <BarChart2 className="w-4 h-4" />;
-    case 'scatter': return <Circle className="w-4 h-4" />;
-    case 'histogram': return <BarChart3 className="w-4 h-4" />;
-    default: return <BarChart3 className="w-4 h-4" />;
+    case 'line': return <TrendingUp className="w-3.5 h-3.5" />;
+    case 'bar': return <BarChart2 className="w-3.5 h-3.5" />;
+    case 'scatter': return <Circle className="w-3.5 h-3.5" />;
+    case 'histogram': return <BarChart3 className="w-3.5 h-3.5" />;
+    default: return <BarChart3 className="w-3.5 h-3.5" />;
   }
-}
-
-function ChartTypeLabel({ type }: { type: string }) {
-  return (
-    <Badge variant="secondary" className="text-xs capitalize">
-      {getChartIcon(type)}
-      <span className="ml-1">{type}</span>
-    </Badge>
-  );
 }
 
 function formatAxisValue(value: any): string {
@@ -60,8 +46,8 @@ function formatAxisValue(value: any): string {
     }
     return value.toFixed(value % 1 === 0 ? 0 : 1);
   }
-  if (typeof value === 'string' && value.length > 12) {
-    return value.slice(0, 12) + '...';
+  if (typeof value === 'string' && value.length > 10) {
+    return value.slice(0, 10) + '...';
   }
   return String(value);
 }
@@ -70,15 +56,14 @@ function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload || !payload.length) return null;
 
   return (
-    <div className="bg-popover border border-popover-border rounded-lg p-3 shadow-lg">
-      <p className="text-sm font-medium mb-2">{label}</p>
+    <div className="bg-popover/95 backdrop-blur border border-border rounded-md px-3 py-2 shadow-lg">
+      <p className="text-xs font-medium mb-1.5 text-muted-foreground">{label}</p>
       {payload.map((entry: any, index: number) => (
         <div key={index} className="flex items-center gap-2 text-sm">
           <div 
-            className="w-3 h-3 rounded-sm" 
+            className="w-2 h-2 rounded-full" 
             style={{ backgroundColor: entry.color }}
           />
-          <span className="text-muted-foreground">{entry.name}:</span>
           <span className="font-mono font-medium">{formatAxisValue(entry.value)}</span>
         </div>
       ))}
@@ -86,37 +71,28 @@ function CustomTooltip({ active, payload, label }: any) {
   );
 }
 
+const axisStyle = {
+  tick: { fill: 'hsl(var(--muted-foreground))', fontSize: 11 },
+  axisLine: { stroke: 'hsl(var(--border))' },
+  tickLine: false as const,
+};
+
 function LineChartComponent({ config }: { config: ChartConfig }) {
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <LineChart data={config.data} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-        <XAxis 
-          dataKey={config.xAxis} 
-          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-          tickFormatter={formatAxisValue}
-          axisLine={{ stroke: 'hsl(var(--border))' }}
-          tickLine={{ stroke: 'hsl(var(--border))' }}
-        />
-        <YAxis 
-          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-          tickFormatter={formatAxisValue}
-          axisLine={{ stroke: 'hsl(var(--border))' }}
-          tickLine={{ stroke: 'hsl(var(--border))' }}
-        />
+    <ResponsiveContainer width="100%" height={220}>
+      <LineChart data={config.data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} opacity={0.5} />
+        <XAxis dataKey={config.xAxis} {...axisStyle} tickFormatter={formatAxisValue} />
+        <YAxis {...axisStyle} tickFormatter={formatAxisValue} />
         <Tooltip content={<CustomTooltip />} />
-        <Legend 
-          wrapperStyle={{ paddingTop: '20px' }}
-          formatter={(value) => <span className="text-foreground text-sm">{value}</span>}
-        />
         {config.yAxis && (
           <Line 
             type="monotone" 
             dataKey={config.yAxis} 
-            stroke={CHART_COLORS[0]} 
+            stroke={CHART_COLORS.primary} 
             strokeWidth={2}
-            dot={{ fill: CHART_COLORS[0], strokeWidth: 0, r: 3 }}
-            activeDot={{ r: 5, strokeWidth: 0 }}
+            dot={false}
+            activeDot={{ r: 4, strokeWidth: 0, fill: CHART_COLORS.primary }}
           />
         )}
       </LineChart>
@@ -126,33 +102,14 @@ function LineChartComponent({ config }: { config: ChartConfig }) {
 
 function BarChartComponent({ config }: { config: ChartConfig }) {
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={config.data} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-        <XAxis 
-          dataKey={config.xAxis}
-          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-          tickFormatter={formatAxisValue}
-          axisLine={{ stroke: 'hsl(var(--border))' }}
-          tickLine={{ stroke: 'hsl(var(--border))' }}
-        />
-        <YAxis 
-          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-          tickFormatter={formatAxisValue}
-          axisLine={{ stroke: 'hsl(var(--border))' }}
-          tickLine={{ stroke: 'hsl(var(--border))' }}
-        />
+    <ResponsiveContainer width="100%" height={220}>
+      <BarChart data={config.data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} opacity={0.5} />
+        <XAxis dataKey={config.xAxis} {...axisStyle} tickFormatter={formatAxisValue} />
+        <YAxis {...axisStyle} tickFormatter={formatAxisValue} />
         <Tooltip content={<CustomTooltip />} />
-        <Legend 
-          wrapperStyle={{ paddingTop: '20px' }}
-          formatter={(value) => <span className="text-foreground text-sm">{value}</span>}
-        />
         {config.yAxis && (
-          <Bar 
-            dataKey={config.yAxis} 
-            fill={CHART_COLORS[0]} 
-            radius={[4, 4, 0, 0]}
-          />
+          <Bar dataKey={config.yAxis} fill={CHART_COLORS.primary} radius={[3, 3, 0, 0]} />
         )}
       </BarChart>
     </ResponsiveContainer>
@@ -161,33 +118,13 @@ function BarChartComponent({ config }: { config: ChartConfig }) {
 
 function ScatterChartComponent({ config }: { config: ChartConfig }) {
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <ScatterChart margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-        <XAxis 
-          dataKey={config.xAxis}
-          type="number"
-          name={config.xAxis}
-          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-          tickFormatter={formatAxisValue}
-          axisLine={{ stroke: 'hsl(var(--border))' }}
-          tickLine={{ stroke: 'hsl(var(--border))' }}
-        />
-        <YAxis 
-          dataKey={config.yAxis}
-          type="number"
-          name={config.yAxis || ''}
-          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-          tickFormatter={formatAxisValue}
-          axisLine={{ stroke: 'hsl(var(--border))' }}
-          tickLine={{ stroke: 'hsl(var(--border))' }}
-        />
+    <ResponsiveContainer width="100%" height={220}>
+      <ScatterChart margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+        <XAxis dataKey={config.xAxis} type="number" name={config.xAxis} {...axisStyle} tickFormatter={formatAxisValue} />
+        <YAxis dataKey={config.yAxis} type="number" name={config.yAxis || ''} {...axisStyle} tickFormatter={formatAxisValue} />
         <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3' }} />
-        <Scatter 
-          name={`${config.xAxis} vs ${config.yAxis}`}
-          data={config.data} 
-          fill={CHART_COLORS[2]}
-        />
+        <Scatter data={config.data} fill={CHART_COLORS.tertiary} />
       </ScatterChart>
     </ResponsiveContainer>
   );
@@ -195,28 +132,13 @@ function ScatterChartComponent({ config }: { config: ChartConfig }) {
 
 function HistogramComponent({ config }: { config: ChartConfig }) {
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={config.data} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-        <XAxis 
-          dataKey={config.xAxis}
-          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-          axisLine={{ stroke: 'hsl(var(--border))' }}
-          tickLine={{ stroke: 'hsl(var(--border))' }}
-        />
-        <YAxis 
-          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-          tickFormatter={formatAxisValue}
-          axisLine={{ stroke: 'hsl(var(--border))' }}
-          tickLine={{ stroke: 'hsl(var(--border))' }}
-        />
+    <ResponsiveContainer width="100%" height={220}>
+      <BarChart data={config.data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} opacity={0.5} />
+        <XAxis dataKey={config.xAxis} {...axisStyle} />
+        <YAxis {...axisStyle} tickFormatter={formatAxisValue} />
         <Tooltip content={<CustomTooltip />} />
-        <Bar 
-          dataKey="count" 
-          fill={CHART_COLORS[1]} 
-          radius={[4, 4, 0, 0]}
-          name="Frequency"
-        />
+        <Bar dataKey="count" fill={CHART_COLORS.secondary} radius={[3, 3, 0, 0]} name="Frequency" />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -266,7 +188,6 @@ function ChartCard({ config }: { config: ChartConfig }) {
     
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      console.error('Failed to load chart image for export');
     };
     
     img.src = url;
@@ -283,39 +204,36 @@ function ChartCard({ config }: { config: ChartConfig }) {
   };
 
   return (
-    <Card className="overflow-visible" data-testid={`chart-${config.id}`}>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <CardTitle className="text-base font-medium">{config.title}</CardTitle>
-          <div className="flex items-center gap-2">
-            <ChartTypeLabel type={config.type} />
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={handleDownload}
-              data-testid={`button-download-${config.id}`}
-            >
-              <Download className="w-4 h-4" />
-            </Button>
-          </div>
+    <div className="group" data-testid={`chart-${config.id}`}>
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-muted-foreground">{getChartIcon(config.type)}</span>
+          <h3 className="text-sm font-medium truncate">{config.title}</h3>
         </div>
-      </CardHeader>
-      <CardContent className="pt-4" ref={chartRef}>
+        <Button 
+          variant="ghost" 
+          size="icon"
+          className="opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={handleDownload}
+          data-testid={`button-download-${config.id}`}
+        >
+          <Download className="w-4 h-4" />
+        </Button>
+      </div>
+      <div ref={chartRef} className="bg-muted/30 rounded-lg p-3">
         {renderChart()}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-64 text-center p-8">
-      <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center mb-4">
-        <BarChart3 className="w-8 h-8 text-muted-foreground" />
-      </div>
-      <h3 className="font-medium text-lg mb-2">No Charts Available</h3>
-      <p className="text-sm text-muted-foreground max-w-sm">
-        We couldn't generate any charts from your data. Try uploading a file with numeric or date columns.
+      <BarChart3 className="w-10 h-10 text-muted-foreground/50 mb-3" />
+      <h3 className="font-medium mb-1">No Charts Available</h3>
+      <p className="text-sm text-muted-foreground max-w-xs">
+        Upload a file with numeric or date columns to generate charts.
       </p>
     </div>
   );
@@ -327,24 +245,10 @@ export function ChartsPanel({ charts }: ChartsPanelProps) {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-          <BarChart3 className="w-5 h-5 text-primary" />
-        </div>
-        <div>
-          <h2 className="font-semibold text-lg">Visualizations</h2>
-          <p className="text-sm text-muted-foreground">
-            {charts.length} chart{charts.length !== 1 ? 's' : ''} generated from your data
-          </p>
-        </div>
-      </div>
-
-      <div className="space-y-6">
-        {charts.map((chart) => (
-          <ChartCard key={chart.id} config={chart} />
-        ))}
-      </div>
+    <div className="p-4 md:p-5 space-y-6 h-full overflow-y-auto">
+      {charts.map((chart) => (
+        <ChartCard key={chart.id} config={chart} />
+      ))}
     </div>
   );
 }

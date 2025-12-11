@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef } from "react";
 import { Upload, FileSpreadsheet, Loader2, AlertCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import type { AnalysisResult } from "@shared/schema";
@@ -12,6 +12,7 @@ interface UploadZoneProps {
 export function UploadZone({ onAnalysisComplete, onUploadStart, isAnalyzing }: UploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback(async (file: File) => {
     setError(null);
@@ -83,20 +84,30 @@ export function UploadZone({ onAnalysisComplete, onUploadStart, isAnalyzing }: U
   }, []);
 
   const handleClick = useCallback(() => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.csv,.tsv,.xlsx,.xls';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        handleFile(file);
-      }
-    };
-    input.click();
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFile(file);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   }, [handleFile]);
 
   return (
     <div className="w-full max-w-2xl mx-auto">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,.tsv,.xlsx,.xls"
+        onChange={handleInputChange}
+        className="sr-only"
+        data-testid="upload-input"
+      />
+      
       <div className="text-center mb-8">
         <h1 className="text-2xl md:text-3xl font-semibold mb-3">
           Transform Your Data Into Insights
