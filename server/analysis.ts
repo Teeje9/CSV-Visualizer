@@ -41,6 +41,15 @@ const URL_REGEX = /^https?:\/\/|^www\./i;
 const PHONE_REGEX = /^[\+]?[(]?[0-9]{1,3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/;
 const ZIP_REGEX = /^\d{5}(-\d{4})?$|^[A-Z]\d[A-Z]\s?\d[A-Z]\d$/i;
 const LAT_LNG_REGEX = /^-?\d{1,3}\.\d{4,}$/;
+const UNIX_TIMESTAMP_REGEX = /^1[0-9]{9,12}$/;
+
+const MEASUREMENT_UNITS: Record<string, string> = {
+  '_m': 'm', '_km': 'km', '_ft': 'ft', '_mi': 'mi', '_in': 'in', '_cm': 'cm', '_mm': 'mm',
+  '_kg': 'kg', '_lb': 'lb', '_g': 'g', '_oz': 'oz',
+  '_sec': 's', '_min': 'min', '_hr': 'h', '_ms': 'ms',
+  '_px': 'px', '_pt': 'pt', '_em': 'em',
+  '_mb': 'MB', '_gb': 'GB', '_kb': 'KB', '_tb': 'TB'
+};
 
 const ID_COLUMN_HINTS = ['id', 'uuid', 'guid', 'key', 'code', 'sku', 'ref', 'number', 'no', '#'];
 const DATE_COLUMN_HINTS = ['date', 'time', 'timestamp', 'created', 'updated', 'modified', 'year', 'month', 'day', 'when', 'period'];
@@ -80,6 +89,7 @@ function detectSemanticType(values: string[], columnName: string): { baseType: B
   let phoneCount = 0;
   let zipCount = 0;
   let latLngCount = 0;
+  let unixTimestampCount = 0;
 
   for (const value of sample) {
     const trimmed = value.trim();
@@ -93,6 +103,9 @@ function detectSemanticType(values: string[], columnName: string): { baseType: B
     }
     if (PERCENTAGE_REGEX.test(trimmed)) {
       percentCount++;
+    }
+    if (UNIX_TIMESTAMP_REGEX.test(trimmed)) {
+      unixTimestampCount++;
     }
     if (TIMESTAMP_PATTERNS.some(p => p.test(trimmed))) {
       timestampCount++;
@@ -110,7 +123,7 @@ function detectSemanticType(values: string[], columnName: string): { baseType: B
     if (URL_REGEX.test(trimmed)) {
       urlCount++;
     }
-    if (PHONE_REGEX.test(trimmed)) {
+    if (PHONE_REGEX.test(trimmed) && !UNIX_TIMESTAMP_REGEX.test(trimmed)) {
       phoneCount++;
     }
     if (ZIP_REGEX.test(trimmed)) {
@@ -131,6 +144,7 @@ function detectSemanticType(values: string[], columnName: string): { baseType: B
 
   if (booleanCount >= strictThreshold) return { baseType: 'boolean', semanticType: 'boolean' };
 
+  if (unixTimestampCount >= threshold) return { baseType: 'temporal', semanticType: 'timestamp', format: 'unix' };
   if (timestampCount >= threshold) return { baseType: 'temporal', semanticType: 'timestamp' };
   if (dateCount >= threshold || columnNameContains(lowerName, DATE_COLUMN_HINTS)) {
     if (sample.every(s => /^\d{4}$/.test(s.trim()))) {
@@ -167,6 +181,11 @@ function detectSemanticType(values: string[], columnName: string): { baseType: B
     }
     if (columnNameContains(lowerName, COUNT_COLUMN_HINTS)) {
       return { baseType: 'numeric', semanticType: 'count' };
+    }
+    for (const [suffix, unit] of Object.entries(MEASUREMENT_UNITS)) {
+      if (lowerName.endsWith(suffix)) {
+        return { baseType: 'numeric', semanticType: 'measurement', unit };
+      }
     }
     return { baseType: 'numeric', semanticType: 'generic_numeric' };
   }
@@ -527,7 +546,10 @@ function generateSmartCharts(columns: ColumnInfo[], rows: Record<string, string>
   for (const candidate of candidates) {
     if (uniqueCharts.length >= 6) break;
     
-    const key = `${candidate.type}-${candidate.xAxis}-${candidate.yAxis || ''}`;
+    const isTimeSeries = candidate.reason === 'time_series';
+    const key = isTimeSeries 
+      ? `${candidate.type}-timeseries-${candidate.yAxis || ''}` 
+      : `${candidate.type}-${candidate.xAxis}-${candidate.yAxis || ''}`;
     if (seenTypes.has(key)) continue;
     seenTypes.add(key);
 
