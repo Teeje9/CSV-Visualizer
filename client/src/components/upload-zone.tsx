@@ -20,14 +20,15 @@ export function UploadZone({ onAnalysisComplete, onUploadStart, isAnalyzing }: U
       'text/csv',
       'text/tab-separated-values',
       'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     ];
-    const validExtensions = ['.csv', '.tsv'];
+    const validExtensions = ['.csv', '.tsv', '.xlsx', '.xls'];
     
     const extension = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
     const isValidType = validTypes.includes(file.type) || validExtensions.includes(extension);
     
     if (!isValidType) {
-      setError("Please upload a CSV or TSV file");
+      setError("Please upload a CSV, TSV, or Excel file");
       return;
     }
 
@@ -84,7 +85,7 @@ export function UploadZone({ onAnalysisComplete, onUploadStart, isAnalyzing }: U
   const handleClick = useCallback(() => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.csv,.tsv';
+    input.accept = '.csv,.tsv,.xlsx,.xls';
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
@@ -152,7 +153,7 @@ export function UploadZone({ onAnalysisComplete, onUploadStart, isAnalyzing }: U
                   {isDragging ? 'Drop your file here' : 'Drop your CSV here or click to browse'}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Supports CSV and TSV files up to 5MB
+                  Supports CSV, TSV, and Excel files up to 5MB
                 </p>
               </div>
             </>

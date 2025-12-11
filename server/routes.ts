@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import Papa from "papaparse";
+import * as XLSX from "xlsx";
 import { analyzeData } from "./analysis";
 import type { UploadResponse } from "@shared/schema";
 
@@ -15,16 +16,17 @@ const upload = multer({
       'text/csv',
       'text/tab-separated-values',
       'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'text/plain',
     ];
-    const allowedExts = ['.csv', '.tsv'];
+    const allowedExts = ['.csv', '.tsv', '.xlsx', '.xls'];
     
     const ext = file.originalname.toLowerCase().slice(file.originalname.lastIndexOf('.'));
     
     if (allowedMimes.includes(file.mimetype) || allowedExts.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Only CSV and TSV files are allowed'));
+      cb(new Error('Only CSV, TSV, and Excel files are allowed'));
     }
   },
 });
@@ -44,24 +46,52 @@ export async function registerRoutes(
         return res.status(400).json(response);
       }
 
-      const content = req.file.buffer.toString('utf-8');
-      
-      const parsed = Papa.parse(content, {
-        header: true,
-        skipEmptyLines: true,
-        transformHeader: (header) => header.trim(),
-      });
+      const ext = req.file.originalname.toLowerCase().slice(req.file.originalname.lastIndexOf('.'));
+      let headers: string[] = [];
+      let rows: Record<string, string>[] = [];
 
-      if (parsed.errors.length > 0 && parsed.data.length === 0) {
-        const response: UploadResponse = {
-          success: false,
-          error: 'Failed to parse CSV file. Please check the file format.'
-        };
-        return res.status(400).json(response);
+      if (ext === '.xlsx' || ext === '.xls') {
+        const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { raw: false, defval: '' });
+        
+        if (jsonData.length === 0) {
+          const response: UploadResponse = {
+            success: false,
+            error: 'The Excel file appears to be empty or has no valid data.'
+          };
+          return res.status(400).json(response);
+        }
+
+        headers = Object.keys(jsonData[0]).map(h => String(h).trim());
+        rows = jsonData.map(row => {
+          const strRow: Record<string, string> = {};
+          for (const key of headers) {
+            strRow[key] = String(row[key] ?? '');
+          }
+          return strRow;
+        });
+      } else {
+        const content = req.file.buffer.toString('utf-8');
+        
+        const parsed = Papa.parse(content, {
+          header: true,
+          skipEmptyLines: true,
+          transformHeader: (header) => header.trim(),
+        });
+
+        if (parsed.errors.length > 0 && parsed.data.length === 0) {
+          const response: UploadResponse = {
+            success: false,
+            error: 'Failed to parse CSV file. Please check the file format.'
+          };
+          return res.status(400).json(response);
+        }
+
+        headers = parsed.meta.fields || [];
+        rows = parsed.data as Record<string, string>[];
       }
-
-      const headers = parsed.meta.fields || [];
-      const rows = parsed.data as Record<string, string>[];
 
       if (headers.length === 0 || rows.length === 0) {
         const response: UploadResponse = {
@@ -102,7 +132,7 @@ export async function registerRoutes(
       }
     }
     
-    if (err.message === 'Only CSV and TSV files are allowed') {
+    if (err.message === 'Only CSV, TSV, and Excel files are allowed') {
       return res.status(400).json({
         success: false,
         error: err.message
