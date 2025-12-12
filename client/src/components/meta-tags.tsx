@@ -38,6 +38,30 @@ export function MetaTags({ variant }: MetaTagsProps) {
     }
     ogType.setAttribute("content", "website");
 
+    let ogImage = document.querySelector('meta[property="og:image"]');
+    if (!ogImage) {
+      ogImage = document.createElement("meta");
+      ogImage.setAttribute("property", "og:image");
+      document.head.appendChild(ogImage);
+    }
+    ogImage.setAttribute("content", "https://placehold.co/1200x630/1e293b/ffffff?text=CSVVIZ");
+
+    let ogUrl = document.querySelector('meta[property="og:url"]');
+    if (!ogUrl) {
+      ogUrl = document.createElement("meta");
+      ogUrl.setAttribute("property", "og:url");
+      document.head.appendChild(ogUrl);
+    }
+    ogUrl.setAttribute("content", window.location.href);
+
+    let twitterCard = document.querySelector('meta[name="twitter:card"]');
+    if (!twitterCard) {
+      twitterCard = document.createElement("meta");
+      twitterCard.setAttribute("name", "twitter:card");
+      document.head.appendChild(twitterCard);
+    }
+    twitterCard.setAttribute("content", "summary_large_image");
+
     let keywords = document.querySelector('meta[name="keywords"]');
     if (!keywords) {
       keywords = document.createElement("meta");
