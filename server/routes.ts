@@ -6,8 +6,9 @@ import * as XLSX from "xlsx";
 import { analyzeData } from "./analysis";
 import type { UploadResponse, AnalysisResult } from "@shared/schema";
 import OpenAI from "openai";
+import { setupAuth, isAuthenticated } from "./replitAuth";
+import { storage } from "./storage";
 
-// This is using Replit's AI Integrations service, which provides OpenAI-compatible API access without requiring your own OpenAI API key.
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
@@ -38,11 +39,42 @@ const upload = multer({
   },
 });
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
-  
+export async function registerRoutes(app: Express): Promise<Server> {
+  await setupAuth(app);
+
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  app.get('/api/export-usage', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const now = new Date();
+      const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      
+      const usage = await storage.getExportUsage(userId, yearMonth);
+      const exportCount = usage?.exportCount || 0;
+      const freeExportsRemaining = Math.max(0, 1 - exportCount);
+      
+      res.json({
+        exportCount,
+        freeExportsRemaining,
+        requiresPayment: exportCount >= 1,
+        yearMonth,
+      });
+    } catch (error) {
+      console.error("Error fetching export usage:", error);
+      res.status(500).json({ message: "Failed to fetch export usage" });
+    }
+  });
+
   app.post('/api/analyze', upload.single('file'), async (req, res) => {
     try {
       if (!req.file) {
@@ -216,5 +248,6 @@ Write like you're telling a friend what you found. Lead with the most interestin
     });
   });
 
+  const httpServer = createServer(app);
   return httpServer;
 }
