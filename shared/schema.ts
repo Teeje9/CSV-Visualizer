@@ -89,6 +89,18 @@ export const outlierSchema = z.object({
 
 export type Outlier = z.infer<typeof outlierSchema>;
 
+export const statisticalTestSchema = z.object({
+  type: z.enum(["t_test", "f_test", "pca"]),
+  title: z.string(),
+  description: z.string(),
+  pValue: z.number().optional(),
+  statistic: z.number().optional(),
+  significant: z.boolean().optional(),
+  details: z.record(z.any()).optional(),
+});
+
+export type StatisticalTest = z.infer<typeof statisticalTestSchema>;
+
 export const insightSchema = z.object({
   type: z.enum(["trend", "correlation", "statistic", "outlier", "pattern", "quality", "summary"]),
   icon: z.string(),
@@ -137,6 +149,7 @@ export const analysisResultSchema = z.object({
   dataQuality: dataQualitySchema.optional(),
   rawData: z.array(z.record(z.string())).optional(),
   aiSummary: z.string().optional(),
+  statisticalTests: z.array(statisticalTestSchema).optional(),
 });
 
 export type AnalysisResult = z.infer<typeof analysisResultSchema>;

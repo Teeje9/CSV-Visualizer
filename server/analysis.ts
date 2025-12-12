@@ -10,7 +10,8 @@ import type {
   Insight, 
   ChartConfig,
   AnalysisResult,
-  DataQuality
+  DataQuality,
+  StatisticalTest
 } from '@shared/schema';
 
 interface ParsedData {
@@ -292,6 +293,365 @@ function calculateCorrelation(col1: string, values1: number[], col2: string, val
   } catch {
     return null;
   }
+}
+
+function performTTest(
+  groupColumn: string,
+  valueColumn: string,
+  rows: Record<string, string>[],
+  columns: ColumnInfo[]
+): StatisticalTest | null {
+  const groupCol = columns.find(c => c.name === groupColumn);
+  if (!groupCol || groupCol.cardinality !== 2) return null;
+
+  const groups: Record<string, number[]> = {};
+  
+  for (const row of rows) {
+    const groupValue = row[groupColumn] || '';
+    const numValue = cleanNumericValue(row[valueColumn] || '');
+    
+    if (groupValue && !isNaN(numValue) && isFinite(numValue)) {
+      if (!groups[groupValue]) groups[groupValue] = [];
+      groups[groupValue].push(numValue);
+    }
+  }
+
+  const groupNames = Object.keys(groups);
+  if (groupNames.length !== 2) return null;
+  
+  const group1 = groups[groupNames[0]];
+  const group2 = groups[groupNames[1]];
+  
+  if (group1.length < 3 || group2.length < 3) return null;
+
+  const mean1 = ss.mean(group1);
+  const mean2 = ss.mean(group2);
+  const var1 = ss.variance(group1);
+  const var2 = ss.variance(group2);
+  const n1 = group1.length;
+  const n2 = group2.length;
+  
+  const pooledSE = Math.sqrt((var1 / n1) + (var2 / n2));
+  if (pooledSE === 0) return null;
+  
+  const tStatistic = (mean1 - mean2) / pooledSE;
+  const df = Math.min(n1 - 1, n2 - 1);
+  
+  const pValue = tDistributionPValue(Math.abs(tStatistic), df);
+  const significant = pValue < 0.05;
+  
+  const comparison = mean1 > mean2 ? 'higher' : 'lower';
+  const diffPercent = Math.abs((mean1 - mean2) / ((mean1 + mean2) / 2) * 100);
+  
+  return {
+    type: 't_test',
+    title: `T-Test: ${valueColumn} by ${groupColumn}`,
+    description: significant 
+      ? `Significant difference found! ${groupNames[0]} has ${diffPercent.toFixed(1)}% ${comparison} ${valueColumn} than ${groupNames[1]} (p=${pValue.toFixed(4)}).`
+      : `No significant difference in ${valueColumn} between ${groupNames[0]} and ${groupNames[1]} (p=${pValue.toFixed(4)}).`,
+    pValue,
+    statistic: tStatistic,
+    significant,
+    details: {
+      group1Name: groupNames[0],
+      group2Name: groupNames[1],
+      group1Mean: mean1,
+      group2Mean: mean2,
+      group1Count: n1,
+      group2Count: n2
+    }
+  };
+}
+
+function tDistributionPValue(t: number, df: number): number {
+  const x = df / (df + t * t);
+  const beta = regularizedIncompleteBeta(df / 2, 0.5, x);
+  return beta;
+}
+
+function regularizedIncompleteBeta(a: number, b: number, x: number): number {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  
+  const lnBeta = logGamma(a) + logGamma(b) - logGamma(a + b);
+  const front = Math.exp(Math.log(x) * a + Math.log(1 - x) * b - lnBeta) / a;
+  
+  let f = 1, c = 1, d = 0;
+  
+  for (let m = 0; m <= 200; m++) {
+    let num: number;
+    if (m === 0) {
+      num = 1;
+    } else if (m % 2 === 0) {
+      const k = m / 2;
+      num = (k * (b - k) * x) / ((a + m - 1) * (a + m));
+    } else {
+      const k = (m - 1) / 2;
+      num = -((a + k) * (a + b + k) * x) / ((a + m - 1) * (a + m));
+    }
+    
+    d = 1 + num * d;
+    if (Math.abs(d) < 1e-30) d = 1e-30;
+    d = 1 / d;
+    
+    c = 1 + num / c;
+    if (Math.abs(c) < 1e-30) c = 1e-30;
+    
+    const delta = c * d;
+    f *= delta;
+    
+    if (Math.abs(delta - 1) < 1e-10) break;
+  }
+  
+  return Math.min(1, Math.max(0, front * f));
+}
+
+function logGamma(z: number): number {
+  const g = 7;
+  const coef = [
+    0.99999999999980993,
+    676.5203681218851,
+    -1259.1392167224028,
+    771.32342877765313,
+    -176.61502916214059,
+    12.507343278686905,
+    -0.13857109526572012,
+    9.9843695780195716e-6,
+    1.5056327351493116e-7
+  ];
+  
+  if (z < 0.5) {
+    return Math.log(Math.PI / Math.sin(Math.PI * z)) - logGamma(1 - z);
+  }
+  
+  z -= 1;
+  let x = coef[0];
+  for (let i = 1; i < g + 2; i++) {
+    x += coef[i] / (z + i);
+  }
+  
+  const t = z + g + 0.5;
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
+}
+
+function performFTest(
+  groupColumn: string,
+  valueColumn: string,
+  rows: Record<string, string>[],
+  columns: ColumnInfo[]
+): StatisticalTest | null {
+  const groupCol = columns.find(c => c.name === groupColumn);
+  if (!groupCol || groupCol.cardinality < 3 || groupCol.cardinality > 10) return null;
+
+  const groups: Record<string, number[]> = {};
+  
+  for (const row of rows) {
+    const groupValue = row[groupColumn] || '';
+    const numValue = cleanNumericValue(row[valueColumn] || '');
+    
+    if (groupValue && !isNaN(numValue) && isFinite(numValue)) {
+      if (!groups[groupValue]) groups[groupValue] = [];
+      groups[groupValue].push(numValue);
+    }
+  }
+
+  const groupNames = Object.keys(groups);
+  if (groupNames.length < 3) return null;
+  
+  const validGroups = groupNames.filter(g => groups[g].length >= 2);
+  if (validGroups.length < 3) return null;
+
+  const allValues: number[] = [];
+  const groupMeans: Record<string, number> = {};
+  
+  for (const name of validGroups) {
+    const values = groups[name];
+    allValues.push(...values);
+    groupMeans[name] = ss.mean(values);
+  }
+  
+  const grandMean = ss.mean(allValues);
+  const k = validGroups.length;
+  const N = allValues.length;
+  
+  let ssBetween = 0;
+  let ssWithin = 0;
+  
+  for (const name of validGroups) {
+    const values = groups[name];
+    const groupMean = groupMeans[name];
+    ssBetween += values.length * Math.pow(groupMean - grandMean, 2);
+    
+    for (const value of values) {
+      ssWithin += Math.pow(value - groupMean, 2);
+    }
+  }
+  
+  const dfBetween = k - 1;
+  const dfWithin = N - k;
+  
+  if (dfWithin <= 0 || ssWithin === 0) return null;
+  
+  const msBetween = ssBetween / dfBetween;
+  const msWithin = ssWithin / dfWithin;
+  const fStatistic = msBetween / msWithin;
+  
+  const pValue = fDistributionPValue(fStatistic, dfBetween, dfWithin);
+  const significant = pValue < 0.05;
+  
+  const sortedGroups = validGroups.sort((a, b) => groupMeans[b] - groupMeans[a]);
+  const highest = sortedGroups[0];
+  const lowest = sortedGroups[sortedGroups.length - 1];
+  
+  return {
+    type: 'f_test',
+    title: `ANOVA: ${valueColumn} across ${groupColumn}`,
+    description: significant 
+      ? `Significant differences found across ${k} groups (p=${pValue.toFixed(4)}). ${highest} has the highest mean, ${lowest} has the lowest.`
+      : `No significant differences in ${valueColumn} across ${k} ${groupColumn} groups (p=${pValue.toFixed(4)}).`,
+    pValue,
+    statistic: fStatistic,
+    significant,
+    details: {
+      groupCount: k,
+      highestGroup: highest,
+      lowestGroup: lowest,
+      groupMeans: groupMeans
+    }
+  };
+}
+
+function fDistributionPValue(f: number, d1: number, d2: number): number {
+  if (f <= 0) return 1;
+  const x = (d1 * f) / (d1 * f + d2);
+  return 1 - regularizedIncompleteBeta(d1 / 2, d2 / 2, x);
+}
+
+function performPCA(
+  numericColumns: ColumnInfo[],
+  rows: Record<string, string>[]
+): StatisticalTest | null {
+  if (numericColumns.length < 4) return null;
+  
+  const validCols = numericColumns.filter(c => 
+    c.semanticType !== 'id' && 
+    c.semanticType !== 'latitude' && 
+    c.semanticType !== 'longitude' &&
+    c.cardinality > 5
+  ).slice(0, 8);
+  
+  if (validCols.length < 4) return null;
+
+  const data: number[][] = [];
+  
+  for (const row of rows.slice(0, 500)) {
+    const values: number[] = [];
+    let valid = true;
+    
+    for (const col of validCols) {
+      const num = cleanNumericValue(row[col.name] || '');
+      if (isNaN(num) || !isFinite(num)) {
+        valid = false;
+        break;
+      }
+      values.push(num);
+    }
+    
+    if (valid) data.push(values);
+  }
+  
+  if (data.length < 10) return null;
+
+  const means: number[] = [];
+  const stds: number[] = [];
+  
+  for (let j = 0; j < validCols.length; j++) {
+    const colValues = data.map(row => row[j]);
+    means.push(ss.mean(colValues));
+    stds.push(ss.standardDeviation(colValues) || 1);
+  }
+
+  const normalized = data.map(row => 
+    row.map((val, j) => (val - means[j]) / stds[j])
+  );
+
+  const n = normalized.length;
+  const p = validCols.length;
+  const covMatrix: number[][] = [];
+  
+  for (let i = 0; i < p; i++) {
+    covMatrix[i] = [];
+    for (let j = 0; j < p; j++) {
+      let sum = 0;
+      for (let k = 0; k < n; k++) {
+        sum += normalized[k][i] * normalized[k][j];
+      }
+      covMatrix[i][j] = sum / (n - 1);
+    }
+  }
+
+  const totalVariance = covMatrix.reduce((sum, row, i) => sum + row[i], 0);
+  
+  const variances = covMatrix.map((row, i) => ({
+    column: validCols[i].name,
+    variance: row[i]
+  })).sort((a, b) => b.variance - a.variance);
+  
+  const topContributors = variances.slice(0, 3);
+  const topVariancePercent = (topContributors.reduce((s, v) => s + v.variance, 0) / totalVariance * 100);
+
+  return {
+    type: 'pca',
+    title: `Principal Component Analysis`,
+    description: `Analyzed ${validCols.length} numeric columns. The top 3 variables (${topContributors.map(c => c.column).join(', ')}) explain ${topVariancePercent.toFixed(0)}% of the total variance, indicating they carry the most information in your dataset.`,
+    details: {
+      columnsAnalyzed: validCols.length,
+      rowsAnalyzed: data.length,
+      topContributors: topContributors.map(c => c.column),
+      varianceExplained: topVariancePercent
+    }
+  };
+}
+
+function runStatisticalTests(
+  columns: ColumnInfo[],
+  rows: Record<string, string>[]
+): StatisticalTest[] {
+  const tests: StatisticalTest[] = [];
+  
+  const numericCols = columns.filter(c => 
+    c.baseType === 'numeric' && 
+    c.semanticType !== 'id'
+  );
+  
+  const categoricalCols = columns.filter(c => 
+    c.baseType === 'categorical' &&
+    c.cardinality >= 2 &&
+    c.cardinality <= 10
+  );
+
+  const tTestCols = categoricalCols.filter(c => c.cardinality === 2);
+  for (const catCol of tTestCols.slice(0, 1)) {
+    for (const numCol of numericCols.slice(0, 2)) {
+      const result = performTTest(catCol.name, numCol.name, rows, columns);
+      if (result) tests.push(result);
+    }
+  }
+
+  const fTestCols = categoricalCols.filter(c => c.cardinality >= 3 && c.cardinality <= 10);
+  for (const catCol of fTestCols.slice(0, 1)) {
+    for (const numCol of numericCols.slice(0, 1)) {
+      const result = performFTest(catCol.name, numCol.name, rows, columns);
+      if (result) tests.push(result);
+    }
+  }
+
+  if (numericCols.length >= 4) {
+    const pcaResult = performPCA(numericCols, rows);
+    if (pcaResult) tests.push(pcaResult);
+  }
+  
+  return tests;
 }
 
 function detectOutliers(column: string, rows: Record<string, string>[]): Outlier[] {
@@ -717,6 +1077,7 @@ export function analyzeData(parsedData: ParsedData, fileName: string): AnalysisR
   const dataQuality = assessDataQuality(rows, columns);
   const charts = generateSmartCharts(columns, rows);
   const insights = generateSemanticInsights(columns, numericStats, correlations, trends, outliers, dataQuality);
+  const statisticalTests = runStatisticalTests(columns, rows);
 
   const rawData = rows.slice(0, 50).map(row => {
     const cleanedRow: Record<string, string> = {};
@@ -739,6 +1100,7 @@ export function analyzeData(parsedData: ParsedData, fileName: string): AnalysisR
     insights,
     charts,
     dataQuality,
-    rawData
+    rawData,
+    statisticalTests
   };
 }

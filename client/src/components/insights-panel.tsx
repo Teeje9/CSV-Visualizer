@@ -5,11 +5,14 @@ import {
   Activity,
   AlertTriangle,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  FlaskConical,
+  CheckCircle,
+  XCircle
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
-import type { AnalysisResult, NumericStats, Correlation, Trend, Outlier } from "@shared/schema";
+import type { AnalysisResult, NumericStats, Correlation, Trend, Outlier, StatisticalTest } from "@shared/schema";
 import { DataTable } from "./data-table";
 import { AISummary } from "./ai-summary";
 import { Separator } from "@/components/ui/separator";
@@ -135,6 +138,50 @@ function OutlierItem({ column, outliers }: { column: string; outliers: Outlier[]
   );
 }
 
+function StatisticalTestItem({ test }: { test: StatisticalTest }) {
+  const getTestIcon = () => {
+    if (test.type === 'pca') return <FlaskConical className="w-4 h-4 text-violet-500" />;
+    if (test.significant) return <CheckCircle className="w-4 h-4 text-emerald-500" />;
+    return <XCircle className="w-4 h-4 text-muted-foreground" />;
+  };
+
+  const getTestBadge = () => {
+    switch (test.type) {
+      case 't_test': return 'T-Test';
+      case 'f_test': return 'ANOVA';
+      case 'pca': return 'PCA';
+      default: return test.type;
+    }
+  };
+
+  return (
+    <div className="py-3 border-b border-border/50 last:border-0" data-testid={`stat-test-${test.type}`}>
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5">{getTestIcon()}</div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <Badge variant="secondary" className="text-xs">{getTestBadge()}</Badge>
+            {test.pValue !== undefined && (
+              <span className="text-xs text-muted-foreground font-mono">
+                p={test.pValue.toFixed(4)}
+              </span>
+            )}
+            {test.significant !== undefined && (
+              <Badge 
+                variant={test.significant ? "default" : "outline"} 
+                className="text-xs"
+              >
+                {test.significant ? 'Significant' : 'Not Significant'}
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">{test.description}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatRow({ stat }: { stat: NumericStats }) {
   const [expanded, setExpanded] = useState(false);
   
@@ -227,6 +274,7 @@ export function InsightsPanel({ result }: InsightsPanelProps) {
   const hasOutliers = Object.keys(outliersByColumn).length > 0;
   const hasStats = result.numericStats.length > 0;
   const hasRawData = result.rawData && result.rawData.length > 0;
+  const hasStatisticalTests = result.statisticalTests && result.statisticalTests.length > 0;
 
   return (
     <div className="p-4 md:p-5 space-y-6 h-full overflow-y-auto">
@@ -261,6 +309,16 @@ export function InsightsPanel({ result }: InsightsPanelProps) {
           <div className="divide-y divide-border/50">
             {result.correlations.slice(0, 5).map((corr, i) => (
               <CorrelationItem key={i} correlation={corr} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {hasStatisticalTests && (
+        <Section title="Statistical Analysis" count={result.statisticalTests!.length}>
+          <div>
+            {result.statisticalTests!.map((test, i) => (
+              <StatisticalTestItem key={i} test={test} />
             ))}
           </div>
         </Section>
