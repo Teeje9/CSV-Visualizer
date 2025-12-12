@@ -257,6 +257,7 @@ export function PdfExport({ result, chartsContainerRef }: PdfExportProps) {
         
         for (let i = 0; i < Math.min(chartElements.length, 4); i++) {
           const chartEl = chartElements[i] as HTMLElement;
+          const chartTitle = result.charts[i]?.title || `Chart ${i + 1}`;
           
           try {
             const canvas = await html2canvas(chartEl, {
@@ -269,13 +270,19 @@ export function PdfExport({ result, chartsContainerRef }: PdfExportProps) {
             const imgWidth = contentWidth;
             const imgHeight = (canvas.height * imgWidth) / canvas.width;
             
-            if (yPos + imgHeight > pageHeight - 20) {
+            if (yPos + imgHeight + 10 > pageHeight - 20) {
               pdf.addPage();
               yPos = margin;
             }
             
+            pdf.setTextColor(30, 41, 59);
+            pdf.setFontSize(11);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(chartTitle, margin, yPos);
+            yPos += 6;
+            
             pdf.addImage(imgData, 'PNG', margin, yPos, imgWidth, imgHeight);
-            yPos += imgHeight + 10;
+            yPos += imgHeight + 12;
           } catch (err) {
             console.error('Failed to capture chart:', err);
           }
