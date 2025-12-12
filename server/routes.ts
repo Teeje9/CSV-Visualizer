@@ -8,6 +8,7 @@ import type { UploadResponse, AnalysisResult } from "@shared/schema";
 import OpenAI from "openai";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { storage } from "./storage";
+import { getUncachableStripeClient } from "./stripeClient";
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -72,6 +73,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching export usage:", error);
       res.status(500).json({ message: "Failed to fetch export usage" });
+    }
+  });
+
+  app.post('/api/export/record', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const now = new Date();
+      const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      
+      const usage = await storage.incrementExportCount(userId, yearMonth);
+      
+      res.json({
+        success: true,
+        exportCount: usage.exportCount,
+        freeExportsRemaining: Math.max(0, 1 - usage.exportCount),
+      });
+    } catch (error) {
+      console.error("Error recording export:", error);
+      res.status(500).json({ message: "Failed to record export" });
+    }
+  });
+
+  app.post('/api/checkout/export', isAuthenticated, async (req: any, res) => {
+    try {
+      const stripe = await getUncachableStripeClient();
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: 'PDF Export',
+                description: 'Export your data analysis as a professional PDF report',
+              },
+              unit_amount: 300,
+            },
+            quantity: 1,
+          },
+        ],
+        mode: 'payment',
+        success_url: `${baseUrl}/?export=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/?export=cancelled`,
+        customer_email: user?.email || undefined,
+        metadata: {
+          userId,
+          type: 'pdf_export',
+        },
+      });
+
+      res.json({ url: session.url });
+    } catch (error) {
+      console.error("Error creating checkout session:", error);
+      res.status(500).json({ message: "Failed to create checkout session" });
+    }
+  });
+
+  app.get('/api/checkout/verify/:sessionId', isAuthenticated, async (req: any, res) => {
+    try {
+      const stripe = await getUncachableStripeClient();
+      const { sessionId } = req.params;
+      const userId = req.user.claims.sub;
+
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      
+      if (session.payment_status === 'paid' && session.metadata?.userId === userId) {
+        res.json({ 
+          success: true, 
+          paid: true,
+          message: 'Payment successful. You can now export your report.' 
+        });
+      } else {
+        res.json({ 
+          success: false, 
+          paid: false,
+          message: 'Payment not completed or verified.' 
+        });
+      }
+    } catch (error) {
+      console.error("Error verifying checkout:", error);
+      res.status(500).json({ message: "Failed to verify payment" });
     }
   });
 
