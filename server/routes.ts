@@ -6,11 +6,8 @@ import * as XLSX from "xlsx";
 import { analyzeData } from "./analysis";
 import type { UploadResponse, AnalysisResult } from "@shared/schema";
 import OpenAI from "openai";
-import { setupAuth, isAuthenticated } from "./replitAuth";
-import { storage } from "./storage";
-import { getUncachableStripeClient } from "./stripeClient";
-import { generatePDF } from "./pdfExport";
 
+// This is using Replit's AI Integrations service, which provides OpenAI-compatible API access without requiring your own OpenAI API key.
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
@@ -41,183 +38,11 @@ const upload = multer({
   },
 });
 
-export async function registerRoutes(app: Express): Promise<Server> {
-  await setupAuth(app);
-
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
-    } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
-    }
-  });
-
-  app.get('/api/export-usage', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const now = new Date();
-      const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      
-      const usage = await storage.getExportUsage(userId, yearMonth);
-      const exportCount = usage?.exportCount || 0;
-      const freeExportsRemaining = Math.max(0, 1 - exportCount);
-      
-      res.json({
-        exportCount,
-        freeExportsRemaining,
-        requiresPayment: exportCount >= 1,
-        yearMonth,
-      });
-    } catch (error) {
-      console.error("Error fetching export usage:", error);
-      res.status(500).json({ message: "Failed to fetch export usage" });
-    }
-  });
-
-  app.post('/api/export/record', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const now = new Date();
-      const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      
-      const usage = await storage.incrementExportCount(userId, yearMonth);
-      
-      res.json({
-        success: true,
-        exportCount: usage.exportCount,
-        freeExportsRemaining: Math.max(0, 1 - usage.exportCount),
-      });
-    } catch (error) {
-      console.error("Error recording export:", error);
-      res.status(500).json({ message: "Failed to record export" });
-    }
-  });
-
-  app.post('/api/checkout/export', isAuthenticated, async (req: any, res) => {
-    try {
-      const stripe = await getUncachableStripeClient();
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      
-      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
-      
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ['card'],
-        line_items: [
-          {
-            price_data: {
-              currency: 'usd',
-              product_data: {
-                name: 'PDF Export',
-                description: 'Export your data analysis as a professional PDF report',
-              },
-              unit_amount: 300,
-            },
-            quantity: 1,
-          },
-        ],
-        mode: 'payment',
-        success_url: `${baseUrl}/?export=success&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${baseUrl}/?export=cancelled`,
-        customer_email: user?.email || undefined,
-        metadata: {
-          userId,
-          type: 'pdf_export',
-        },
-      });
-
-      res.json({ url: session.url });
-    } catch (error) {
-      console.error("Error creating checkout session:", error);
-      res.status(500).json({ message: "Failed to create checkout session" });
-    }
-  });
-
-  app.get('/api/checkout/verify/:sessionId', isAuthenticated, async (req: any, res) => {
-    try {
-      const stripe = await getUncachableStripeClient();
-      const { sessionId } = req.params;
-      const userId = req.user.claims.sub;
-
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
-      
-      if (session.payment_status === 'paid' && session.metadata?.userId === userId) {
-        res.json({ 
-          success: true, 
-          paid: true,
-          message: 'Payment successful. You can now export your report.' 
-        });
-      } else {
-        res.json({ 
-          success: false, 
-          paid: false,
-          message: 'Payment not completed or verified.' 
-        });
-      }
-    } catch (error) {
-      console.error("Error verifying checkout:", error);
-      res.status(500).json({ message: "Failed to verify payment" });
-    }
-  });
-
-  app.post('/api/export/pdf', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const { analysisResult, aiSummary, sessionId } = req.body as { 
-        analysisResult: AnalysisResult; 
-        aiSummary?: string;
-        sessionId?: string;
-      };
-
-      if (!analysisResult) {
-        return res.status(400).json({ success: false, error: 'No analysis data provided' });
-      }
-
-      const now = new Date();
-      const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const usage = await storage.getExportUsage(userId, yearMonth);
-      const exportCount = usage?.exportCount || 0;
-
-      if (exportCount >= 1) {
-        if (!sessionId) {
-          return res.status(402).json({ 
-            success: false, 
-            requiresPayment: true,
-            error: 'Free export limit reached. Payment required.' 
-          });
-        }
-
-        const stripe = await getUncachableStripeClient();
-        const session = await stripe.checkout.sessions.retrieve(sessionId);
-        
-        if (session.payment_status !== 'paid' || session.metadata?.userId !== userId) {
-          return res.status(402).json({ 
-            success: false, 
-            requiresPayment: true,
-            error: 'Payment verification failed.' 
-          });
-        }
-      }
-
-      const pdfBuffer = await generatePDF({ analysisResult, aiSummary });
-      
-      await storage.incrementExportCount(userId, yearMonth);
-
-      const fileName = `${analysisResult.fileName.replace(/\.[^/.]+$/, '')}_report.pdf`;
-      
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-      res.setHeader('Content-Length', pdfBuffer.length);
-      res.send(pdfBuffer);
-    } catch (error) {
-      console.error("Error generating PDF:", error);
-      res.status(500).json({ success: false, error: 'Failed to generate PDF' });
-    }
-  });
-
+export async function registerRoutes(
+  httpServer: Server,
+  app: Express
+): Promise<Server> {
+  
   app.post('/api/analyze', upload.single('file'), async (req, res) => {
     try {
       if (!req.file) {
@@ -391,6 +216,5 @@ Write like you're telling a friend what you found. Lead with the most interestin
     });
   });
 
-  const httpServer = createServer(app);
   return httpServer;
 }
