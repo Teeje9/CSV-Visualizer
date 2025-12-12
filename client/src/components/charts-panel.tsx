@@ -250,7 +250,7 @@ function ChartCard({ config, onRemove }: { config: ExtendedChartConfig; onRemove
           >
             <Download className="w-4 h-4" />
           </Button>
-          {config.isCustom && onRemove && (
+          {onRemove && (
             <Button 
               variant="ghost" 
               size="icon"
@@ -284,6 +284,7 @@ function EmptyState() {
 
 export function ChartsPanel({ result }: ChartsPanelProps) {
   const [customCharts, setCustomCharts] = useState<ExtendedChartConfig[]>([]);
+  const [hiddenAutoCharts, setHiddenAutoCharts] = useState<Set<string>>(new Set());
   
   const handleAddCustomChart = (chart: ExtendedChartConfig) => {
     const extendedChart: ExtendedChartConfig = {
@@ -293,13 +294,19 @@ export function ChartsPanel({ result }: ChartsPanelProps) {
     setCustomCharts(prev => [extendedChart, ...prev]);
   };
 
-  const handleRemoveCustomChart = (chartId: string) => {
-    setCustomCharts(prev => prev.filter(c => c.id !== chartId));
+  const handleRemoveChart = (chartId: string, isCustom: boolean) => {
+    if (isCustom) {
+      setCustomCharts(prev => prev.filter(c => c.id !== chartId));
+    } else {
+      setHiddenAutoCharts(prev => new Set(Array.from(prev).concat(chartId)));
+    }
   };
 
   const allCharts: ExtendedChartConfig[] = [
     ...customCharts, 
-    ...result.charts.map(c => ({ ...c, isCustom: false }))
+    ...result.charts
+      .filter(c => !hiddenAutoCharts.has(c.id))
+      .map(c => ({ ...c, isCustom: false }))
   ];
 
   return (
@@ -315,7 +322,7 @@ export function ChartsPanel({ result }: ChartsPanelProps) {
           <ChartCard 
             key={chart.id} 
             config={chart}
-            onRemove={chart.isCustom ? () => handleRemoveCustomChart(chart.id) : undefined}
+            onRemove={() => handleRemoveChart(chart.id, chart.isCustom || false)}
           />
         ))
       )}
