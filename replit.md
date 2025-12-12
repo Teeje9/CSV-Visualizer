@@ -64,6 +64,22 @@ Preferred communication style: Simple, everyday language.
 - `multer`: File upload handling
 - `zod`: Schema validation for type safety
 - `drizzle-orm` / `drizzle-zod`: Database ORM (prepared for future use)
+- `jspdf`: PDF generation for export feature
+- `html2canvas`: Captures charts as images for PDF export
+
+## Recent Features (December 2025)
+
+### Free PDF Export
+- Export button in header generates comprehensive PDF reports
+- Includes AI summary, statistics, correlations, trends, and chart images
+- Uses jspdf + html2canvas for client-side generation
+
+### Advanced Statistical Analysis
+- **T-Test**: Automatically runs when data has categorical column with exactly 2 groups
+- **ANOVA/F-Test**: Runs when categorical column has 3+ groups for multi-group comparison
+- **PCA**: Principal Component Analysis for datasets with 4+ numeric columns
+- Statistical results displayed in Insights panel with significance indicators
+- Uses Lanczos approximation for gamma function and Lentz's continued fraction for p-values
 
 ### Fonts
 - Google Fonts: Inter, JetBrains Mono, DM Sans, Fira Code, Geist Mono
