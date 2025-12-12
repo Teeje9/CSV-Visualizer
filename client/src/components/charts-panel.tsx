@@ -1,4 +1,4 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useState } from "react";
 import { 
   LineChart, 
   Line, 
@@ -10,14 +10,21 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  ResponsiveContainer
+  ResponsiveContainer,
+  Legend
 } from "recharts";
 import { Button } from "@/components/ui/button";
-import { BarChart3, TrendingUp, Circle, BarChart2, Download } from "lucide-react";
-import type { ChartConfig } from "@shared/schema";
+import { BarChart3, TrendingUp, Circle, BarChart2, Download, X } from "lucide-react";
+import { ChartBuilder } from "./chart-builder";
+import type { ChartConfig, AnalysisResult } from "@shared/schema";
 
 interface ChartsPanelProps {
-  charts: ChartConfig[];
+  result: AnalysisResult;
+}
+
+interface ExtendedChartConfig extends ChartConfig {
+  yAxes?: string[];
+  isCustom?: boolean;
 }
 
 const CHART_COLORS = {
@@ -77,7 +84,17 @@ const axisStyle = {
   tickLine: false as const,
 };
 
-function LineChartComponent({ config }: { config: ChartConfig }) {
+const MULTI_Y_COLORS = [
+  "hsl(217, 91%, 60%)",
+  "hsl(173, 80%, 40%)",
+  "hsl(280, 65%, 60%)",
+  "hsl(45, 93%, 47%)",
+  "hsl(0, 84%, 60%)",
+];
+
+function LineChartComponent({ config }: { config: ExtendedChartConfig }) {
+  const yAxes = config.yAxes || (config.yAxis ? [config.yAxis] : []);
+  
   return (
     <ResponsiveContainer width="100%" height={220}>
       <LineChart data={config.data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
@@ -85,22 +102,26 @@ function LineChartComponent({ config }: { config: ChartConfig }) {
         <XAxis dataKey={config.xAxis} {...axisStyle} tickFormatter={formatAxisValue} />
         <YAxis {...axisStyle} tickFormatter={formatAxisValue} />
         <Tooltip content={<CustomTooltip />} />
-        {config.yAxis && (
+        {yAxes.length > 1 && <Legend />}
+        {yAxes.map((yCol, idx) => (
           <Line 
+            key={yCol}
             type="monotone" 
-            dataKey={config.yAxis} 
-            stroke={CHART_COLORS.primary} 
+            dataKey={yCol} 
+            stroke={MULTI_Y_COLORS[idx % MULTI_Y_COLORS.length]} 
             strokeWidth={2}
             dot={false}
-            activeDot={{ r: 4, strokeWidth: 0, fill: CHART_COLORS.primary }}
+            activeDot={{ r: 4, strokeWidth: 0, fill: MULTI_Y_COLORS[idx % MULTI_Y_COLORS.length] }}
           />
-        )}
+        ))}
       </LineChart>
     </ResponsiveContainer>
   );
 }
 
-function BarChartComponent({ config }: { config: ChartConfig }) {
+function BarChartComponent({ config }: { config: ExtendedChartConfig }) {
+  const yAxes = config.yAxes || (config.yAxis ? [config.yAxis] : []);
+  
   return (
     <ResponsiveContainer width="100%" height={220}>
       <BarChart data={config.data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
@@ -108,9 +129,15 @@ function BarChartComponent({ config }: { config: ChartConfig }) {
         <XAxis dataKey={config.xAxis} {...axisStyle} tickFormatter={formatAxisValue} />
         <YAxis {...axisStyle} tickFormatter={formatAxisValue} />
         <Tooltip content={<CustomTooltip />} />
-        {config.yAxis && (
-          <Bar dataKey={config.yAxis} fill={CHART_COLORS.primary} radius={[3, 3, 0, 0]} />
-        )}
+        {yAxes.length > 1 && <Legend />}
+        {yAxes.map((yCol, idx) => (
+          <Bar 
+            key={yCol}
+            dataKey={yCol} 
+            fill={MULTI_Y_COLORS[idx % MULTI_Y_COLORS.length]} 
+            radius={[3, 3, 0, 0]} 
+          />
+        ))}
       </BarChart>
     </ResponsiveContainer>
   );
@@ -144,7 +171,7 @@ function HistogramComponent({ config }: { config: ChartConfig }) {
   );
 }
 
-function ChartCard({ config }: { config: ChartConfig }) {
+function ChartCard({ config, onRemove }: { config: ExtendedChartConfig; onRemove?: () => void }) {
   const chartRef = useRef<HTMLDivElement>(null);
 
   const handleDownload = useCallback(async () => {
@@ -209,16 +236,32 @@ function ChartCard({ config }: { config: ChartConfig }) {
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-muted-foreground">{getChartIcon(config.type)}</span>
           <h3 className="text-sm font-medium truncate">{config.title}</h3>
+          {config.isCustom && (
+            <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded">Custom</span>
+          )}
         </div>
-        <Button 
-          variant="ghost" 
-          size="icon"
-          className="opacity-0 group-hover:opacity-100 transition-opacity"
-          onClick={handleDownload}
-          data-testid={`button-download-${config.id}`}
-        >
-          <Download className="w-4 h-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button 
+            variant="ghost" 
+            size="icon"
+            className="opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={handleDownload}
+            data-testid={`button-download-${config.id}`}
+          >
+            <Download className="w-4 h-4" />
+          </Button>
+          {config.isCustom && onRemove && (
+            <Button 
+              variant="ghost" 
+              size="icon"
+              className="opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={onRemove}
+              data-testid={`button-remove-${config.id}`}
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
       </div>
       <div ref={chartRef} className="bg-muted/30 rounded-lg p-3">
         {renderChart()}
@@ -239,16 +282,43 @@ function EmptyState() {
   );
 }
 
-export function ChartsPanel({ charts }: ChartsPanelProps) {
-  if (charts.length === 0) {
-    return <EmptyState />;
-  }
+export function ChartsPanel({ result }: ChartsPanelProps) {
+  const [customCharts, setCustomCharts] = useState<ExtendedChartConfig[]>([]);
+  
+  const handleAddCustomChart = (chart: ExtendedChartConfig) => {
+    const extendedChart: ExtendedChartConfig = {
+      ...chart,
+      isCustom: true,
+    };
+    setCustomCharts(prev => [extendedChart, ...prev]);
+  };
+
+  const handleRemoveCustomChart = (chartId: string) => {
+    setCustomCharts(prev => prev.filter(c => c.id !== chartId));
+  };
+
+  const allCharts: ExtendedChartConfig[] = [
+    ...customCharts, 
+    ...result.charts.map(c => ({ ...c, isCustom: false }))
+  ];
 
   return (
     <div className="p-4 md:p-5 space-y-6 h-full overflow-y-auto">
-      {charts.map((chart) => (
-        <ChartCard key={chart.id} config={chart} />
-      ))}
+      {result.rawData && result.rawData.length > 0 && (
+        <ChartBuilder result={result} onAddChart={handleAddCustomChart} />
+      )}
+      
+      {allCharts.length === 0 ? (
+        <EmptyState />
+      ) : (
+        allCharts.map((chart) => (
+          <ChartCard 
+            key={chart.id} 
+            config={chart}
+            onRemove={chart.isCustom ? () => handleRemoveCustomChart(chart.id) : undefined}
+          />
+        ))
+      )}
     </div>
   );
 }

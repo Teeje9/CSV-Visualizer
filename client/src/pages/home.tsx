@@ -50,7 +50,7 @@ export default function Home() {
           <InsightsPanel result={analysisResult} />
         </div>
         <div className="w-full lg:w-3/5 overflow-y-auto">
-          <ChartsPanel charts={analysisResult.charts} />
+          <ChartsPanel result={analysisResult} />
         </div>
       </main>
     </div>
