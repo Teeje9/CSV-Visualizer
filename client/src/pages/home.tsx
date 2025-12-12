@@ -6,8 +6,10 @@ import { Header } from "@/components/header";
 import { PdfExport } from "@/components/pdf-export";
 import { MetaTags } from "@/components/meta-tags";
 import { getVariant, type LandingVariant } from "@/lib/seo-config";
+import { sampleDatasets } from "@/lib/sample-data";
+import { Button } from "@/components/ui/button";
 import type { AnalysisResult } from "@shared/schema";
-import { BarChart3, Sparkles, Calculator, FileDown } from "lucide-react";
+import { BarChart3, Sparkles, Calculator, FileDown, FileSpreadsheet, Loader2 } from "lucide-react";
 
 interface HomeProps {
   variantSlug?: string;
@@ -18,6 +20,7 @@ const featureIcons = [BarChart3, Sparkles, Calculator, FileDown];
 export default function Home({ variantSlug = "default" }: HomeProps) {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [loadingSampleId, setLoadingSampleId] = useState<string | null>(null);
   const chartsContainerRef = useRef<HTMLDivElement>(null);
   
   const variant: LandingVariant = getVariant(variantSlug);
@@ -25,15 +28,50 @@ export default function Home({ variantSlug = "default" }: HomeProps) {
   const handleAnalysisComplete = (result: AnalysisResult) => {
     setAnalysisResult(result);
     setIsAnalyzing(false);
+    setLoadingSampleId(null);
   };
 
   const handleNewUpload = () => {
     setAnalysisResult(null);
     setIsAnalyzing(false);
+    setLoadingSampleId(null);
   };
 
   const handleUploadStart = () => {
     setIsAnalyzing(true);
+  };
+
+  const handleLoadSample = async (sampleId: string) => {
+    const sample = sampleDatasets.find(s => s.id === sampleId);
+    if (!sample) return;
+
+    setLoadingSampleId(sampleId);
+    setIsAnalyzing(true);
+
+    const blob = new Blob([sample.data], { type: 'text/csv' });
+    const file = new File([blob], sample.fileName, { type: 'text/csv' });
+    
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+      
+      if (response.ok && result.success) {
+        handleAnalysisComplete(result.data);
+      } else {
+        setIsAnalyzing(false);
+        setLoadingSampleId(null);
+      }
+    } catch {
+      setIsAnalyzing(false);
+      setLoadingSampleId(null);
+    }
   };
 
   if (!analysisResult) {
@@ -58,6 +96,29 @@ export default function Home({ variantSlug = "default" }: HomeProps) {
               onUploadStart={handleUploadStart}
               isAnalyzing={isAnalyzing}
             />
+
+            <div className="mt-8 text-center">
+              <p className="text-sm text-muted-foreground mb-4">Or try with sample data:</p>
+              <div className="flex flex-wrap justify-center gap-3">
+                {sampleDatasets.map((sample) => (
+                  <Button
+                    key={sample.id}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleLoadSample(sample.id)}
+                    disabled={isAnalyzing}
+                    data-testid={`button-sample-${sample.id}`}
+                  >
+                    {loadingSampleId === sample.id ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <FileSpreadsheet className="w-4 h-4 mr-2" />
+                    )}
+                    {sample.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
           </section>
 
           <section className="py-12 md:py-16 px-4 md:px-8 border-t border-border">
