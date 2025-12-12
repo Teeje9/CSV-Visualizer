@@ -63,7 +63,7 @@ export default function Home({ variantSlug = "default" }: HomeProps) {
           <section className="py-12 md:py-16 px-4 md:px-8 border-t border-border">
             <div className="max-w-5xl mx-auto">
               <h2 className="text-xl md:text-2xl font-semibold text-center mb-8 md:mb-12">
-                Why Choose DataViz?
+                Why Choose CSVVIZ?
               </h2>
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

@@ -15,7 +15,7 @@ export interface LandingVariant {
 export const landingVariants: Record<string, LandingVariant> = {
   default: {
     slug: "",
-    title: "DataViz - CSV to Beautiful Charts & Insights",
+    title: "CSVVIZ - CSV to Beautiful Charts & Insights",
     description: "Transform your CSV and Excel files into stunning charts and auto-generated insights. No data analysis skills required.",
     headline: "Turn Data Into Insights in Seconds",
     subheadline: "Upload your CSV or Excel file and get beautiful charts with AI-powered analysis instantly",

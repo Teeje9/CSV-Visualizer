@@ -16,7 +16,7 @@ export function Header({ onNewUpload, showNewUpload, fileName, exportButton }: H
           <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
             <BarChart3 className="w-5 h-5 text-primary-foreground" />
           </div>
-          <span className="font-semibold text-lg hidden sm:inline">DataViz</span>
+          <span className="font-semibold text-lg hidden sm:inline">CSVVIZ</span>
         </div>
       </div>
 

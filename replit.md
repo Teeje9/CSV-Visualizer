@@ -1,8 +1,8 @@
-# DataViz - CSV Data Visualization & Insights Tool
+# CSVVIZ - CSV Data Visualization & Insights Tool
 
 ## Overview
 
-DataViz is a web application that transforms CSV files into beautiful charts and auto-generated insights. Users upload CSV files, and the system automatically detects column types, generates appropriate visualizations (line, bar, scatter, histogram), and produces statistical insights including trends, correlations, outliers, and patterns. The goal is to make data analysis accessible to users who don't know how to choose chart types or analyze data manually.
+CSVVIZ is a web application that transforms CSV files into beautiful charts and auto-generated insights. Users upload CSV files, and the system automatically detects column types, generates appropriate visualizations (line, bar, scatter, histogram), and produces statistical insights including trends, correlations, outliers, and patterns. The goal is to make data analysis accessible to users who don't know how to choose chart types or analyze data manually.
 
 ## User Preferences
 
