@@ -5,6 +5,7 @@ import type { AnalysisResult } from "@shared/schema";
 
 interface AISummaryProps {
   result: AnalysisResult;
+  onSummaryChange?: (summary: string | null) => void;
 }
 
 interface SummaryResponse {

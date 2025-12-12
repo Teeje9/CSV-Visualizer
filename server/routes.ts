@@ -9,6 +9,7 @@ import OpenAI from "openai";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { storage } from "./storage";
 import { getUncachableStripeClient } from "./stripeClient";
+import { generatePDF } from "./pdfExport";
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -159,6 +160,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error verifying checkout:", error);
       res.status(500).json({ message: "Failed to verify payment" });
+    }
+  });
+
+  app.post('/api/export/pdf', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { analysisResult, aiSummary, sessionId } = req.body as { 
+        analysisResult: AnalysisResult; 
+        aiSummary?: string;
+        sessionId?: string;
+      };
+
+      if (!analysisResult) {
+        return res.status(400).json({ success: false, error: 'No analysis data provided' });
+      }
+
+      const now = new Date();
+      const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const usage = await storage.getExportUsage(userId, yearMonth);
+      const exportCount = usage?.exportCount || 0;
+
+      if (exportCount >= 1) {
+        if (!sessionId) {
+          return res.status(402).json({ 
+            success: false, 
+            requiresPayment: true,
+            error: 'Free export limit reached. Payment required.' 
+          });
+        }
+
+        const stripe = await getUncachableStripeClient();
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+        
+        if (session.payment_status !== 'paid' || session.metadata?.userId !== userId) {
+          return res.status(402).json({ 
+            success: false, 
+            requiresPayment: true,
+            error: 'Payment verification failed.' 
+          });
+        }
+      }
+
+      const pdfBuffer = await generatePDF({ analysisResult, aiSummary });
+      
+      await storage.incrementExportCount(userId, yearMonth);
+
+      const fileName = `${analysisResult.fileName.replace(/\.[^/.]+$/, '')}_report.pdf`;
+      
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      res.status(500).json({ success: false, error: 'Failed to generate PDF' });
     }
   });
 
