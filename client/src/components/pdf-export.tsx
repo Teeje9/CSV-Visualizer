@@ -255,9 +255,9 @@ export function PdfExport({ result, chartsContainerRef }: PdfExportProps) {
 
         const chartElements = chartsContainerRef.current.querySelectorAll('[data-chart-container]');
         
-        for (let i = 0; i < Math.min(chartElements.length, 4); i++) {
+        for (let i = 0; i < chartElements.length; i++) {
           const chartEl = chartElements[i] as HTMLElement;
-          const chartTitle = result.charts[i]?.title || `Chart ${i + 1}`;
+          const chartTitle = chartEl.getAttribute('data-chart-title') || `Chart ${i + 1}`;
           
           try {
             const canvas = await html2canvas(chartEl, {

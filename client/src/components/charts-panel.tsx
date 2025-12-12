@@ -263,7 +263,7 @@ function ChartCard({ config, onRemove }: { config: ExtendedChartConfig; onRemove
           )}
         </div>
       </div>
-      <div ref={chartRef} className="bg-muted/30 rounded-lg p-3" data-chart-container>
+      <div ref={chartRef} className="bg-muted/30 rounded-lg p-3" data-chart-container data-chart-title={config.title}>
         {renderChart()}
       </div>
     </div>
