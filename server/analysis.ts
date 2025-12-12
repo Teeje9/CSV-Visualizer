@@ -749,6 +749,37 @@ interface ChartCandidate {
   reason: string;
 }
 
+function parseDateValue(value: string): number {
+  if (!value) return 0;
+  const trimmed = value.trim();
+  
+  const monthNames: Record<string, number> = {
+    'jan': 0, 'january': 0, 'feb': 1, 'february': 1, 'mar': 2, 'march': 2,
+    'apr': 3, 'april': 3, 'may': 4, 'jun': 5, 'june': 5,
+    'jul': 6, 'july': 6, 'aug': 7, 'august': 7, 'sep': 8, 'september': 8,
+    'oct': 9, 'october': 9, 'nov': 10, 'november': 10, 'dec': 11, 'december': 11
+  };
+  
+  const monthYearMatch = trimmed.match(/^(\w+)\s+(\d{4})$/i);
+  if (monthYearMatch) {
+    const month = monthNames[monthYearMatch[1].toLowerCase()];
+    if (month !== undefined) {
+      return new Date(parseInt(monthYearMatch[2]), month, 1).getTime();
+    }
+  }
+  
+  if (/^\d{4}$/.test(trimmed)) {
+    return new Date(parseInt(trimmed), 0, 1).getTime();
+  }
+  
+  const parsed = Date.parse(trimmed);
+  if (!isNaN(parsed)) {
+    return parsed;
+  }
+  
+  return 0;
+}
+
 function generateSmartCharts(columns: ColumnInfo[], rows: Record<string, string>[]): ChartConfig[] {
   const candidates: ChartCandidate[] = [];
   let chartId = 0;
@@ -770,6 +801,12 @@ function generateSmartCharts(columns: ColumnInfo[], rows: Record<string, string>
         [timeCol.name]: row[timeCol.name],
         [numCol.name]: cleanNumericValue(row[numCol.name] || '0')
       })).filter(d => !isNaN(d[numCol.name] as number));
+
+      data.sort((a, b) => {
+        const dateA = parseDateValue(String(a[timeCol.name]));
+        const dateB = parseDateValue(String(b[timeCol.name]));
+        return dateA - dateB;
+      });
 
       if (data.length > 2) {
         const priority = currencyCols.includes(numCol) ? 100 : countCols.includes(numCol) ? 90 : 70;
