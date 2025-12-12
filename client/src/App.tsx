@@ -9,7 +9,10 @@ import Home from "@/pages/home";
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
+      <Route path="/" component={() => <Home variantSlug="default" />} />
+      <Route path="/csv-charts" component={() => <Home variantSlug="csv-charts" />} />
+      <Route path="/excel-analysis" component={() => <Home variantSlug="excel-analysis" />} />
+      <Route path="/sales-dashboard" component={() => <Home variantSlug="sales-dashboard" />} />
       <Route component={NotFound} />
     </Switch>
   );
