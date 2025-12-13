@@ -69,6 +69,12 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Features (December 2025)
 
+### Multi-Sheet Excel Support
+- Excel files with multiple sheets show inline sheet selector
+- Single-sheet Excel files and CSV files work as before (auto-analyze)
+- New `/api/sheets` endpoint detects sheet count
+- `/api/analyze` accepts optional `sheet` parameter for specific sheet selection
+
 ### Free PDF Export
 - Export button in header generates comprehensive PDF reports
 - Includes AI summary, statistics, correlations, trends, and chart images
