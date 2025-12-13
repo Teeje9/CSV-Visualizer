@@ -1,6 +1,7 @@
 import { useCallback, useState, useRef } from "react";
 import { Upload, FileSpreadsheet, Loader2, AlertCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import type { AnalysisResult } from "@shared/schema";
 
 interface UploadZoneProps {
@@ -9,13 +10,50 @@ interface UploadZoneProps {
   isAnalyzing: boolean;
 }
 
+interface SheetSelection {
+  sheets: string[];
+  fileName: string;
+  file: File;
+}
+
 export function UploadZone({ onAnalysisComplete, onUploadStart, isAnalyzing }: UploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sheetSelection, setSheetSelection] = useState<SheetSelection | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const analyzeWithSheet = useCallback(async (file: File, sheetName?: string) => {
+    onUploadStart();
+    setSheetSelection(null);
+
+    const formData = new FormData();
+    formData.append('file', file);
+    if (sheetName) {
+      formData.append('sheet', sheetName);
+    }
+
+    try {
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok || !result.success) {
+        setError(result.error || "Failed to analyze file");
+        return;
+      }
+
+      onAnalysisComplete(result.data);
+    } catch (err) {
+      setError("Failed to upload file. Please try again.");
+    }
+  }, [onAnalysisComplete, onUploadStart]);
 
   const handleFile = useCallback(async (file: File) => {
     setError(null);
+    setSheetSelection(null);
     
     const validTypes = [
       'text/csv',
@@ -39,29 +77,35 @@ export function UploadZone({ onAnalysisComplete, onUploadStart, isAnalyzing }: U
       return;
     }
 
-    onUploadStart();
+    const isExcel = extension === '.xlsx' || extension === '.xls';
+    
+    if (isExcel) {
+      const formData = new FormData();
+      formData.append('file', file);
 
-    const formData = new FormData();
-    formData.append('file', file);
+      try {
+        const response = await fetch('/api/sheets', {
+          method: 'POST',
+          body: formData,
+        });
 
-    try {
-      const response = await fetch('/api/analyze', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const result = await response.json();
-      
-      if (!response.ok || !result.success) {
-        setError(result.error || "Failed to analyze file");
-        return;
+        const result = await response.json();
+        
+        if (result.success && result.sheets && result.sheets.length > 1) {
+          setSheetSelection({
+            sheets: result.sheets,
+            fileName: result.fileName,
+            file: file,
+          });
+          return;
+        }
+      } catch (err) {
+        // Fall through to normal analysis
       }
-
-      onAnalysisComplete(result.data);
-    } catch (err) {
-      setError("Failed to upload file. Please try again.");
     }
-  }, [onAnalysisComplete, onUploadStart]);
+
+    analyzeWithSheet(file);
+  }, [analyzeWithSheet]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -180,6 +224,31 @@ export function UploadZone({ onAnalysisComplete, onUploadStart, isAnalyzing }: U
             <p className="text-sm text-destructive/80">{error}</p>
           </div>
         </div>
+      )}
+
+      {sheetSelection && (
+        <Card className="mt-4 p-4">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5 text-muted-foreground" />
+              <span className="font-medium">{sheetSelection.fileName}</span>
+              <span className="text-muted-foreground text-sm">has {sheetSelection.sheets.length} sheets</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {sheetSelection.sheets.map((sheet) => (
+                <Button
+                  key={sheet}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => analyzeWithSheet(sheetSelection.file, sheet)}
+                  data-testid={`sheet-button-${sheet.replace(/\s+/g, '-').toLowerCase()}`}
+                >
+                  {sheet}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </Card>
       )}
 
       <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">

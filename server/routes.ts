@@ -42,6 +42,38 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  app.post('/api/sheets', upload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ success: false, error: 'No file uploaded' });
+      }
+
+      const ext = req.file.originalname.toLowerCase().slice(req.file.originalname.lastIndexOf('.'));
+      
+      if (ext !== '.xlsx' && ext !== '.xls') {
+        return res.json({ success: true, sheets: null });
+      }
+
+      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      
+      if (workbook.SheetNames.length <= 1) {
+        return res.json({ success: true, sheets: null });
+      }
+
+      return res.json({ 
+        success: true, 
+        sheets: workbook.SheetNames,
+        fileName: req.file.originalname
+      });
+    } catch (error) {
+      console.error('Sheet detection error:', error);
+      return res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to read Excel file'
+      });
+    }
+  });
   
   app.post('/api/analyze', upload.single('file'), async (req, res) => {
     try {
@@ -54,13 +86,23 @@ export async function registerRoutes(
       }
 
       const ext = req.file.originalname.toLowerCase().slice(req.file.originalname.lastIndexOf('.'));
+      const selectedSheet = req.body?.sheet as string | undefined;
       let headers: string[] = [];
       let rows: Record<string, string>[] = [];
 
       if (ext === '.xlsx' || ext === '.xls') {
         const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-        const sheetName = workbook.SheetNames[0];
+        const sheetName = selectedSheet || workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
+        
+        if (!sheet) {
+          const response: UploadResponse = {
+            success: false,
+            error: `Sheet "${sheetName}" not found in the Excel file.`
+          };
+          return res.status(400).json(response);
+        }
+        
         const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { raw: false, defval: '' });
         
         if (jsonData.length === 0) {
