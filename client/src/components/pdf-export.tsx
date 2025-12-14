@@ -384,11 +384,17 @@ export function PdfExport({ result, chartsContainerRef }: PdfExportProps) {
           const chartTitle = chartEl.getAttribute('data-chart-title') || `Chart ${i + 1}`;
           
           try {
+            const originalBg = chartEl.style.backgroundColor;
+            chartEl.style.backgroundColor = '#ffffff';
+            
             const canvas = await html2canvas(chartEl, {
               scale: 2,
               backgroundColor: '#ffffff',
               logging: false,
+              useCORS: true,
             });
+            
+            chartEl.style.backgroundColor = originalBg;
             
             const imgData = canvas.toDataURL('image/png');
             const imgWidth = contentWidth - 8;
