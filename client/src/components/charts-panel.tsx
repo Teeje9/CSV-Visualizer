@@ -22,12 +22,28 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { BarChart3, TrendingUp, Circle, BarChart2, Download, X, Settings, AreaChartIcon, PieChartIcon } from "lucide-react";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { BarChart3, TrendingUp, Circle, BarChart2, Download, X, Settings, AreaChartIcon, PieChartIcon, Sparkles } from "lucide-react";
 import { ChartBuilder } from "./chart-builder";
 import type { ChartConfig, AnalysisResult } from "@shared/schema";
 
@@ -44,6 +60,14 @@ interface ChartCustomSettings {
   showGrid: boolean;
   showLegend: boolean;
   showDataLabels: boolean;
+  // Scale options
+  yAxisMin?: number | 'auto';
+  yAxisMax?: number | 'auto';
+  scaleType: 'linear' | 'log';
+  labelRotation: number;
+  // Appearance
+  curveType: 'linear' | 'smooth' | 'step';
+  barWidth: number;
 }
 
 const DEFAULT_SETTINGS: ChartCustomSettings = {
@@ -51,6 +75,12 @@ const DEFAULT_SETTINGS: ChartCustomSettings = {
   showGrid: true,
   showLegend: true,
   showDataLabels: false,
+  yAxisMin: 'auto',
+  yAxisMax: 'auto',
+  scaleType: 'linear',
+  labelRotation: 0,
+  curveType: 'smooth',
+  barWidth: 80,
 };
 
 const COLOR_PALETTES = {
@@ -143,94 +173,310 @@ function getColors(settings?: ChartCustomSettings): string[] {
   return settings?.colors?.length ? settings.colors : MULTI_Y_COLORS;
 }
 
-function ChartCustomizer({ 
+interface ChartTypeInfo {
+  type: ChartType;
+  label: string;
+  description: string;
+}
+
+const ALL_CHART_TYPES: ChartTypeInfo[] = [
+  { type: 'line', label: 'Line', description: 'Best for trends over time' },
+  { type: 'bar', label: 'Bar', description: 'Best for comparing categories' },
+  { type: 'area', label: 'Area', description: 'Shows cumulative values' },
+  { type: 'scatter', label: 'Scatter', description: 'Shows correlations between variables' },
+  { type: 'pie', label: 'Pie', description: 'Shows proportions of a whole' },
+  { type: 'histogram', label: 'Histogram', description: 'Shows distribution of values' },
+];
+
+function getSuggestedTypes(originalType: ChartType, hasTimeData: boolean, hasCategoryData: boolean): ChartType[] {
+  const suggested: ChartType[] = [originalType];
+  
+  if (hasTimeData) {
+    if (!suggested.includes('line')) suggested.push('line');
+    if (!suggested.includes('area')) suggested.push('area');
+  }
+  
+  if (hasCategoryData) {
+    if (!suggested.includes('bar')) suggested.push('bar');
+    if (!suggested.includes('pie')) suggested.push('pie');
+  }
+  
+  if (originalType === 'scatter') {
+    suggested.push('scatter');
+  }
+  
+  return suggested;
+}
+
+function ChartEditor({ 
   settings, 
   onSettingsChange,
-  originalType 
+  originalType,
+  chartData,
+  xAxisKey
 }: { 
   settings: ChartCustomSettings; 
   onSettingsChange: (settings: ChartCustomSettings) => void;
   originalType: ChartType;
+  chartData?: any[];
+  xAxisKey?: string;
 }) {
-  const baseTypes: ChartType[] = ['line', 'bar', 'area'];
-  const compatibleTypes: ChartType[] = baseTypes.includes(originalType) 
-    ? baseTypes 
-    : [originalType, ...baseTypes];
   const currentType = settings.chartType || originalType;
   
+  const hasTimeData = originalType === 'line' || (chartData && xAxisKey && 
+    chartData.some(d => {
+      const val = d[xAxisKey];
+      return typeof val === 'string' && !isNaN(Date.parse(val));
+    }));
+  
+  const hasCategoryData = originalType === 'bar' || originalType === 'pie' || 
+    Boolean(chartData && xAxisKey && chartData.some(d => typeof d[xAxisKey] === 'string'));
+  
+  const suggestedTypes = getSuggestedTypes(originalType, hasTimeData, hasCategoryData);
+  
+  const handleYMinChange = (value: string) => {
+    const num = parseFloat(value);
+    onSettingsChange({ 
+      ...settings, 
+      yAxisMin: value === '' || isNaN(num) ? 'auto' : num 
+    });
+  };
+  
+  const handleYMaxChange = (value: string) => {
+    const num = parseFloat(value);
+    onSettingsChange({ 
+      ...settings, 
+      yAxisMax: value === '' || isNaN(num) ? 'auto' : num 
+    });
+  };
+  
   return (
-    <div className="space-y-4 p-1">
-      <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">Chart Type</Label>
-        <div className="flex gap-1">
-          {compatibleTypes.map((type) => (
-            <Button
-              key={type}
-              variant="ghost"
-              size="icon"
-              className={`toggle-elevate ${currentType === type ? 'toggle-elevated bg-muted' : ''}`}
-              onClick={() => onSettingsChange({ ...settings, chartType: type })}
-              data-testid={`button-chart-type-${type}`}
-            >
-              {getChartIcon(type)}
-            </Button>
-          ))}
-        </div>
-      </div>
+    <Tabs defaultValue="type" className="w-full">
+      <TabsList className="grid w-full grid-cols-3 mb-3">
+        <TabsTrigger value="type" className="text-xs">Type</TabsTrigger>
+        <TabsTrigger value="scale" className="text-xs">Scale</TabsTrigger>
+        <TabsTrigger value="style" className="text-xs">Style</TabsTrigger>
+      </TabsList>
       
-      <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">Color Palette</Label>
-        <div className="grid grid-cols-3 gap-1">
-          {Object.entries(COLOR_PALETTES).map(([name, colors]) => (
-            <button
-              key={name}
-              className={`flex gap-0.5 p-1.5 rounded-md border hover-elevate ${
-                JSON.stringify(settings.colors) === JSON.stringify(colors) 
-                  ? 'border-primary bg-muted' 
-                  : 'border-transparent'
-              }`}
-              onClick={() => onSettingsChange({ ...settings, colors })}
-              data-testid={`button-palette-${name}`}
-            >
-              {colors.slice(0, 4).map((color, i) => (
-                <div 
-                  key={i} 
-                  className="w-3 h-3 rounded-full" 
-                  style={{ backgroundColor: color }} 
-                />
-              ))}
-            </button>
-          ))}
+      <TabsContent value="type" className="space-y-3 mt-0">
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">Chart Type</Label>
+          <div className="grid grid-cols-2 gap-1.5">
+            {ALL_CHART_TYPES.map((info) => {
+              const isSuggested = suggestedTypes.includes(info.type);
+              const isSelected = currentType === info.type;
+              
+              return (
+                <button
+                  key={info.type}
+                  className={`flex items-center gap-2 p-2 rounded-md border text-left hover-elevate ${
+                    isSelected 
+                      ? 'border-primary bg-primary/10' 
+                      : 'border-transparent bg-muted/30'
+                  }`}
+                  onClick={() => onSettingsChange({ ...settings, chartType: info.type })}
+                  data-testid={`button-chart-type-${info.type}`}
+                >
+                  <span className="text-muted-foreground">{getChartIcon(info.type)}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-medium">{info.label}</span>
+                      {isSuggested && (
+                        <Badge variant="secondary" className="text-[9px] px-1 py-0 flex items-center gap-0.5">
+                          <Sparkles className="w-2.5 h-2.5" />
+                          Suggested
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+        
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">Color Palette</Label>
+          <div className="grid grid-cols-3 gap-1">
+            {Object.entries(COLOR_PALETTES).map(([name, colors]) => (
+              <button
+                key={name}
+                className={`flex gap-0.5 p-1.5 rounded-md border hover-elevate ${
+                  JSON.stringify(settings.colors) === JSON.stringify(colors) 
+                    ? 'border-primary bg-muted' 
+                    : 'border-transparent'
+                }`}
+                onClick={() => onSettingsChange({ ...settings, colors })}
+                data-testid={`button-palette-${name}`}
+              >
+                {colors.slice(0, 4).map((color, i) => (
+                  <div 
+                    key={i} 
+                    className="w-3 h-3 rounded-full" 
+                    style={{ backgroundColor: color }} 
+                  />
+                ))}
+              </button>
+            ))}
+          </div>
+        </div>
+      </TabsContent>
       
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <Label className="text-xs">Show Grid</Label>
-          <Switch
-            checked={settings.showGrid}
-            onCheckedChange={(checked) => onSettingsChange({ ...settings, showGrid: checked })}
-            data-testid="switch-show-grid"
-          />
+      <TabsContent value="scale" className="space-y-4 mt-0">
+        <div className="space-y-3">
+          <Label className="text-xs text-muted-foreground">Y-Axis Range</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">Min</Label>
+              <Input
+                type="text"
+                placeholder="Auto"
+                value={settings.yAxisMin === 'auto' ? '' : settings.yAxisMin}
+                onChange={(e) => handleYMinChange(e.target.value)}
+                className="h-8 text-xs"
+                data-testid="input-y-min"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">Max</Label>
+              <Input
+                type="text"
+                placeholder="Auto"
+                value={settings.yAxisMax === 'auto' ? '' : settings.yAxisMax}
+                onChange={(e) => handleYMaxChange(e.target.value)}
+                className="h-8 text-xs"
+                data-testid="input-y-max"
+              />
+            </div>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="w-full text-xs"
+            onClick={() => onSettingsChange({ ...settings, yAxisMin: 'auto', yAxisMax: 'auto' })}
+          >
+            Reset to Auto
+          </Button>
         </div>
-        <div className="flex items-center justify-between">
-          <Label className="text-xs">Show Legend</Label>
-          <Switch
-            checked={settings.showLegend}
-            onCheckedChange={(checked) => onSettingsChange({ ...settings, showLegend: checked })}
-            data-testid="switch-show-legend"
-          />
+        
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">Scale Type</Label>
+          <Select 
+            value={settings.scaleType} 
+            onValueChange={(v) => onSettingsChange({ ...settings, scaleType: v as 'linear' | 'log' })}
+          >
+            <SelectTrigger className="h-8 text-xs" data-testid="select-scale-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="linear">
+                <div className="flex items-center gap-2">
+                  <span>Linear</span>
+                  <Badge variant="secondary" className="text-[9px] px-1 py-0">
+                    <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+                    Default
+                  </Badge>
+                </div>
+              </SelectItem>
+              <SelectItem value="log">Logarithmic</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <div className="flex items-center justify-between">
-          <Label className="text-xs">Data Labels</Label>
-          <Switch
-            checked={settings.showDataLabels}
-            onCheckedChange={(checked) => onSettingsChange({ ...settings, showDataLabels: checked })}
-            data-testid="switch-data-labels"
+        
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs text-muted-foreground">X-Axis Label Rotation</Label>
+            <span className="text-xs text-muted-foreground font-mono">{settings.labelRotation}</span>
+          </div>
+          <Slider
+            value={[settings.labelRotation]}
+            min={-90}
+            max={90}
+            step={15}
+            onValueChange={([v]) => onSettingsChange({ ...settings, labelRotation: v })}
+            data-testid="slider-label-rotation"
           />
+          <div className="flex justify-between text-[10px] text-muted-foreground">
+            <span>-90</span>
+            <span>0</span>
+            <span>90</span>
+          </div>
         </div>
-      </div>
-    </div>
+      </TabsContent>
+      
+      <TabsContent value="style" className="space-y-3 mt-0">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Show Grid</Label>
+            <Switch
+              checked={settings.showGrid}
+              onCheckedChange={(checked) => onSettingsChange({ ...settings, showGrid: checked })}
+              data-testid="switch-show-grid"
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Show Legend</Label>
+            <Switch
+              checked={settings.showLegend}
+              onCheckedChange={(checked) => onSettingsChange({ ...settings, showLegend: checked })}
+              data-testid="switch-show-legend"
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Data Labels</Label>
+            <Switch
+              checked={settings.showDataLabels}
+              onCheckedChange={(checked) => onSettingsChange({ ...settings, showDataLabels: checked })}
+              data-testid="switch-data-labels"
+            />
+          </div>
+        </div>
+        
+        {(currentType === 'line' || currentType === 'area') && (
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Line Style</Label>
+            <Select 
+              value={settings.curveType} 
+              onValueChange={(v) => onSettingsChange({ ...settings, curveType: v as 'linear' | 'smooth' | 'step' })}
+            >
+              <SelectTrigger className="h-8 text-xs" data-testid="select-curve-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="smooth">
+                  <div className="flex items-center gap-2">
+                    <span>Smooth</span>
+                    <Badge variant="secondary" className="text-[9px] px-1 py-0">
+                      <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+                      Suggested
+                    </Badge>
+                  </div>
+                </SelectItem>
+                <SelectItem value="linear">Straight</SelectItem>
+                <SelectItem value="step">Stepped</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        
+        {(currentType === 'bar' || currentType === 'histogram') && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground">Bar Width</Label>
+              <span className="text-xs text-muted-foreground font-mono">{settings.barWidth}%</span>
+            </div>
+            <Slider
+              value={[settings.barWidth]}
+              min={20}
+              max={100}
+              step={10}
+              onValueChange={([v]) => onSettingsChange({ ...settings, barWidth: v })}
+              data-testid="slider-bar-width"
+            />
+          </div>
+        )}
+      </TabsContent>
+    </Tabs>
   );
 }
 
@@ -489,11 +735,13 @@ function ChartCard({
                 <Settings className="w-4 h-4" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-64" align="end">
-              <ChartCustomizer 
+            <PopoverContent className="w-80" align="end">
+              <ChartEditor 
                 settings={settings} 
                 onSettingsChange={onSettingsChange}
                 originalType={config.type as ChartType}
+                chartData={config.data}
+                xAxisKey={config.xAxis}
               />
             </PopoverContent>
           </Popover>
