@@ -480,25 +480,58 @@ function ChartEditor({
   );
 }
 
+function getCurveType(curveType?: 'linear' | 'smooth' | 'step'): 'linear' | 'monotone' | 'step' {
+  switch (curveType) {
+    case 'linear': return 'linear';
+    case 'step': return 'step';
+    case 'smooth':
+    default: return 'monotone';
+  }
+}
+
+function getYAxisDomain(settings?: ChartCustomSettings): [number | 'auto' | 'dataMin', number | 'auto' | 'dataMax'] {
+  const min = settings?.yAxisMin === 'auto' || settings?.yAxisMin === undefined ? 'auto' : settings.yAxisMin;
+  const max = settings?.yAxisMax === 'auto' || settings?.yAxisMax === undefined ? 'auto' : settings.yAxisMax;
+  return [min, max];
+}
+
 function LineChartComponent({ config, settings }: ChartComponentProps) {
   const yAxes = config.yAxes || (config.yAxis ? [config.yAxis] : []);
   const colors = getColors(settings);
   const showGrid = settings?.showGrid ?? true;
   const showLegend = settings?.showLegend ?? true;
   const showDataLabels = settings?.showDataLabels ?? false;
+  const curveType = getCurveType(settings?.curveType);
+  const labelRotation = settings?.labelRotation ?? 0;
+  const yDomain = getYAxisDomain(settings);
+  const scaleType = settings?.scaleType ?? 'linear';
+  const bottomMargin = Math.abs(labelRotation) > 30 ? 40 : 0;
   
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <LineChart data={config.data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+      <LineChart data={config.data} margin={{ top: 8, right: 8, left: -20, bottom: bottomMargin }}>
         {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} opacity={0.5} />}
-        <XAxis dataKey={config.xAxis} {...axisStyle} tickFormatter={formatAxisValue} />
-        <YAxis {...axisStyle} tickFormatter={formatAxisValue} />
+        <XAxis 
+          dataKey={config.xAxis} 
+          {...axisStyle} 
+          tickFormatter={formatAxisValue}
+          angle={labelRotation}
+          textAnchor={labelRotation > 0 ? 'start' : labelRotation < 0 ? 'end' : 'middle'}
+          height={Math.abs(labelRotation) > 30 ? 60 : 30}
+        />
+        <YAxis 
+          {...axisStyle} 
+          tickFormatter={formatAxisValue}
+          domain={yDomain}
+          scale={scaleType}
+          allowDataOverflow={scaleType === 'log'}
+        />
         <Tooltip content={<CustomTooltip />} />
         {showLegend && yAxes.length > 1 && <Legend />}
         {yAxes.map((yCol, idx) => (
           <Line 
             key={yCol}
-            type="monotone" 
+            type={curveType} 
             dataKey={yCol} 
             stroke={colors[idx % colors.length]} 
             strokeWidth={2}
@@ -519,13 +552,35 @@ function BarChartComponent({ config, settings }: ChartComponentProps) {
   const showGrid = settings?.showGrid ?? true;
   const showLegend = settings?.showLegend ?? true;
   const showDataLabels = settings?.showDataLabels ?? false;
+  const labelRotation = settings?.labelRotation ?? 0;
+  const yDomain = getYAxisDomain(settings);
+  const scaleType = settings?.scaleType ?? 'linear';
+  const barWidth = settings?.barWidth ?? 80;
+  const bottomMargin = Math.abs(labelRotation) > 30 ? 40 : 0;
   
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <BarChart data={config.data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+      <BarChart 
+        data={config.data} 
+        margin={{ top: 8, right: 8, left: -20, bottom: bottomMargin }}
+        barCategoryGap={`${100 - barWidth}%`}
+      >
         {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} opacity={0.5} />}
-        <XAxis dataKey={config.xAxis} {...axisStyle} tickFormatter={formatAxisValue} />
-        <YAxis {...axisStyle} tickFormatter={formatAxisValue} />
+        <XAxis 
+          dataKey={config.xAxis} 
+          {...axisStyle} 
+          tickFormatter={formatAxisValue}
+          angle={labelRotation}
+          textAnchor={labelRotation > 0 ? 'start' : labelRotation < 0 ? 'end' : 'middle'}
+          height={Math.abs(labelRotation) > 30 ? 60 : 30}
+        />
+        <YAxis 
+          {...axisStyle} 
+          tickFormatter={formatAxisValue}
+          domain={yDomain}
+          scale={scaleType}
+          allowDataOverflow={scaleType === 'log'}
+        />
         <Tooltip content={<CustomTooltip />} />
         {showLegend && yAxes.length > 1 && <Legend />}
         {yAxes.map((yCol, idx) => (
@@ -548,19 +603,37 @@ function AreaChartComponent({ config, settings }: ChartComponentProps) {
   const colors = getColors(settings);
   const showGrid = settings?.showGrid ?? true;
   const showLegend = settings?.showLegend ?? true;
+  const curveType = getCurveType(settings?.curveType);
+  const labelRotation = settings?.labelRotation ?? 0;
+  const yDomain = getYAxisDomain(settings);
+  const scaleType = settings?.scaleType ?? 'linear';
+  const bottomMargin = Math.abs(labelRotation) > 30 ? 40 : 0;
   
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <AreaChart data={config.data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+      <AreaChart data={config.data} margin={{ top: 8, right: 8, left: -20, bottom: bottomMargin }}>
         {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} opacity={0.5} />}
-        <XAxis dataKey={config.xAxis} {...axisStyle} tickFormatter={formatAxisValue} />
-        <YAxis {...axisStyle} tickFormatter={formatAxisValue} />
+        <XAxis 
+          dataKey={config.xAxis} 
+          {...axisStyle} 
+          tickFormatter={formatAxisValue}
+          angle={labelRotation}
+          textAnchor={labelRotation > 0 ? 'start' : labelRotation < 0 ? 'end' : 'middle'}
+          height={Math.abs(labelRotation) > 30 ? 60 : 30}
+        />
+        <YAxis 
+          {...axisStyle} 
+          tickFormatter={formatAxisValue}
+          domain={yDomain}
+          scale={scaleType}
+          allowDataOverflow={scaleType === 'log'}
+        />
         <Tooltip content={<CustomTooltip />} />
         {showLegend && yAxes.length > 1 && <Legend />}
         {yAxes.map((yCol, idx) => (
           <Area 
             key={yCol}
-            type="monotone" 
+            type={curveType} 
             dataKey={yCol} 
             stroke={colors[idx % colors.length]} 
             fill={colors[idx % colors.length]}
@@ -606,13 +679,35 @@ function PieChartComponent({ config, settings }: ChartComponentProps) {
 function ScatterChartComponent({ config, settings }: ChartComponentProps) {
   const colors = getColors(settings);
   const showGrid = settings?.showGrid ?? true;
+  const labelRotation = settings?.labelRotation ?? 0;
+  const yDomain = getYAxisDomain(settings);
+  const scaleType = settings?.scaleType ?? 'linear';
+  const bottomMargin = Math.abs(labelRotation) > 30 ? 40 : 0;
   
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <ScatterChart margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+      <ScatterChart margin={{ top: 8, right: 8, left: -20, bottom: bottomMargin }}>
         {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />}
-        <XAxis dataKey={config.xAxis} type="number" name={config.xAxis} {...axisStyle} tickFormatter={formatAxisValue} />
-        <YAxis dataKey={config.yAxis} type="number" name={config.yAxis || ''} {...axisStyle} tickFormatter={formatAxisValue} />
+        <XAxis 
+          dataKey={config.xAxis} 
+          type="number" 
+          name={config.xAxis} 
+          {...axisStyle} 
+          tickFormatter={formatAxisValue}
+          angle={labelRotation}
+          textAnchor={labelRotation > 0 ? 'start' : labelRotation < 0 ? 'end' : 'middle'}
+          height={Math.abs(labelRotation) > 30 ? 60 : 30}
+        />
+        <YAxis 
+          dataKey={config.yAxis} 
+          type="number" 
+          name={config.yAxis || ''} 
+          {...axisStyle} 
+          tickFormatter={formatAxisValue}
+          domain={yDomain}
+          scale={scaleType}
+          allowDataOverflow={scaleType === 'log'}
+        />
         <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3' }} />
         <Scatter data={config.data} fill={colors[2]} />
       </ScatterChart>
@@ -624,13 +719,34 @@ function HistogramComponent({ config, settings }: ChartComponentProps) {
   const colors = getColors(settings);
   const showGrid = settings?.showGrid ?? true;
   const showDataLabels = settings?.showDataLabels ?? false;
+  const labelRotation = settings?.labelRotation ?? 0;
+  const yDomain = getYAxisDomain(settings);
+  const scaleType = settings?.scaleType ?? 'linear';
+  const barWidth = settings?.barWidth ?? 80;
+  const bottomMargin = Math.abs(labelRotation) > 30 ? 40 : 0;
   
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <BarChart data={config.data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+      <BarChart 
+        data={config.data} 
+        margin={{ top: 8, right: 8, left: -20, bottom: bottomMargin }}
+        barCategoryGap={`${100 - barWidth}%`}
+      >
         {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} opacity={0.5} />}
-        <XAxis dataKey={config.xAxis} {...axisStyle} />
-        <YAxis {...axisStyle} tickFormatter={formatAxisValue} />
+        <XAxis 
+          dataKey={config.xAxis} 
+          {...axisStyle}
+          angle={labelRotation}
+          textAnchor={labelRotation > 0 ? 'start' : labelRotation < 0 ? 'end' : 'middle'}
+          height={Math.abs(labelRotation) > 30 ? 60 : 30}
+        />
+        <YAxis 
+          {...axisStyle} 
+          tickFormatter={formatAxisValue}
+          domain={yDomain}
+          scale={scaleType}
+          allowDataOverflow={scaleType === 'log'}
+        />
         <Tooltip content={<CustomTooltip />} />
         <Bar dataKey="count" fill={colors[1]} radius={[3, 3, 0, 0]} name="Frequency">
           {showDataLabels && <LabelList dataKey="count" position="top" fontSize={10} />}
