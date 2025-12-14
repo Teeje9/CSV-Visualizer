@@ -87,5 +87,12 @@ Preferred communication style: Simple, everyday language.
 - Statistical results displayed in Insights panel with significance indicators
 - Uses Lanczos approximation for gamma function and Lentz's continued fraction for p-values
 
+### Chart Customization (December 2025)
+- Each chart has a settings popover (gear icon on hover)
+- Users can switch chart types (line, bar, area, etc.)
+- 6 color palettes: default, ocean, sunset, forest, berry, mono
+- Toggle options: Show Grid, Show Legend, Data Labels
+- Settings persist per chart during the session
+
 ### Fonts
 - Google Fonts: Inter, JetBrains Mono, DM Sans, Fira Code, Geist Mono
