@@ -94,5 +94,27 @@ Preferred communication style: Simple, everyday language.
 - Toggle options: Show Grid, Show Legend, Data Labels
 - Settings persist per chart during the session
 
+### Data Preparation (December 2025)
+- Three-stage flow: Upload -> Data Prep -> Results
+- DataPrepPanel shows after file upload for data cleaning
+- **Column Operations**:
+  - View column names, detected types, sample values, missing counts
+  - Rename columns inline
+  - Change column type (numeric, categorical, temporal, boolean, text)
+  - Exclude columns from analysis
+- **Row Operations**:
+  - Detect and optionally remove duplicate rows
+  - Handle missing values: ignore, remove rows, fill with zero, fill with mean
+- Skip button to bypass prep and go directly to analysis
+- Apply button calls `/api/reanalyze` to transform and re-analyze data
+
+### Enhanced Chart Builder (December 2025)
+- Supports chart types: line, bar, area, scatter, pie
+- Select any column for X-axis (categorical, temporal, or numeric)
+- Select one or more numeric columns for Y-axis
+- Aggregation options: none, sum, average, count, min, max
+- Auto-suggests aggregation when grouping by categorical column
+- Multi-Y axis support with color-coded legend
+
 ### Fonts
 - Google Fonts: Inter, JetBrains Mono, DM Sans, Fira Code, Geist Mono
