@@ -102,6 +102,11 @@ Preferred communication style: Simple, everyday language.
   - Rename columns inline
   - Change column type (numeric, categorical, temporal, boolean, text)
   - Exclude columns from analysis
+  - **Per-Column Cleaning Options** (expandable via gear icon):
+    - Trim whitespace: removes leading/trailing whitespace
+    - Strip non-numeric: removes non-numeric characters (for numeric columns)
+    - Treat as ID: marks column as unique identifier, excludes from aggregations
+    - Custom fill value: fills empty cells with specified value
 - **Row Operations**:
   - Detect and optionally remove duplicate rows
   - Handle missing values: ignore, remove rows, fill with zero, fill with mean

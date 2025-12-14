@@ -918,10 +918,12 @@ function generateSmartCharts(columns: ColumnInfo[], rows: Record<string, string>
     }
   }
 
+  // For small datasets, be more lenient with cardinality requirement
+  const minCardinality = rows.length < 20 ? 2 : 5;
   const meaningfulNumerics = numericCols.filter(c => 
     c.semanticType !== 'latitude' && 
     c.semanticType !== 'longitude' &&
-    c.cardinality > 5
+    c.cardinality >= minCardinality
   );
 
   for (let i = 0; i < meaningfulNumerics.length && i < 2; i++) {
@@ -953,7 +955,8 @@ function generateSmartCharts(columns: ColumnInfo[], rows: Record<string, string>
 
   for (const numCol of meaningfulNumerics.slice(0, 2)) {
     const values = getNumericValues(rows, numCol.name);
-    if (values.length < 10) continue;
+    // Lower threshold for small datasets - need at least 3 values for a histogram
+    if (values.length < 3) continue;
 
     const min = ss.min(values);
     const max = ss.max(values);
@@ -1132,14 +1135,17 @@ export function analyzeData(parsedData: ParsedData, fileName: string, uniqueColu
 
   const numericColumns = columns.filter(c => c.baseType === 'numeric');
   const temporalColumns = columns.filter(c => c.baseType === 'temporal');
+  
+  // Filter out ID columns from numeric calculations (correlations, trends, outliers, stats)
+  const meaningfulNumerics = numericColumns.filter(c => c.semanticType !== 'id' && c.cardinality > 5);
+  const nonIdNumericColumns = numericColumns.filter(c => c.semanticType !== 'id');
 
-  const numericStats: NumericStats[] = numericColumns.map(col => {
+  const numericStats: NumericStats[] = nonIdNumericColumns.map(col => {
     const values = getNumericValues(rows, col.name);
     return calculateNumericStats(col.name, values, col.semanticType, col.unit);
   });
 
   const correlations: Correlation[] = [];
-  const meaningfulNumerics = numericColumns.filter(c => c.semanticType !== 'id' && c.cardinality > 5);
   for (let i = 0; i < meaningfulNumerics.length; i++) {
     for (let j = i + 1; j < meaningfulNumerics.length; j++) {
       const { values1, values2 } = getPairedNumericValues(rows, meaningfulNumerics[i].name, meaningfulNumerics[j].name);
@@ -1153,7 +1159,7 @@ export function analyzeData(parsedData: ParsedData, fileName: string, uniqueColu
   const trends: Trend[] = [];
   if (temporalColumns.length > 0) {
     const timeCol = temporalColumns[0];
-    for (const numCol of numericColumns.slice(0, 4)) {
+    for (const numCol of nonIdNumericColumns.slice(0, 4)) {
       const trend = detectTrend(timeCol.name, numCol.name, rows);
       if (trend && trend.direction !== 'stable') {
         trends.push(trend);
@@ -1168,8 +1174,10 @@ export function analyzeData(parsedData: ParsedData, fileName: string, uniqueColu
   }
 
   const dataQuality = assessDataQuality(rows, columns);
+  // generateSmartCharts already filters ID columns internally
   const charts = generateSmartCharts(columns, rows);
   const insights = generateSemanticInsights(columns, numericStats, correlations, trends, outliers, dataQuality);
+  // runStatisticalTests uses categorical columns, pass full list but it already filters internally
   const statisticalTests = runStatisticalTests(columns, rows);
 
   const rawData = rows.slice(0, 50).map(row => {
