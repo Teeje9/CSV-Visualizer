@@ -67,7 +67,23 @@ function columnNameContains(name: string, hints: string[]): boolean {
 }
 
 function cleanNumericValue(value: string): number {
-  const cleaned = value.replace(/[\$\€\£\¥,%\s]/g, '');
+  let cleaned = value.trim();
+  
+  cleaned = cleaned.replace(/[\$\€\£\¥\s]/g, '');
+  
+  if (cleaned.endsWith('%')) {
+    cleaned = cleaned.slice(0, -1);
+  }
+  
+  const isEuropeanFormat = /^\-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(cleaned) || 
+                           /^\-?\d+,\d+$/.test(cleaned);
+  
+  if (isEuropeanFormat) {
+    cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+  } else {
+    cleaned = cleaned.replace(/,/g, '');
+  }
+  
   return parseFloat(cleaned);
 }
 
@@ -229,6 +245,23 @@ function getNumericValues(rows: Record<string, string>[], column: string): numbe
     .filter(n => !isNaN(n) && isFinite(n));
 }
 
+function getPairedNumericValues(rows: Record<string, string>[], col1: string, col2: string): { values1: number[]; values2: number[] } {
+  const values1: number[] = [];
+  const values2: number[] = [];
+  
+  for (const row of rows) {
+    const v1 = cleanNumericValue(row[col1] || '');
+    const v2 = cleanNumericValue(row[col2] || '');
+    
+    if (!isNaN(v1) && isFinite(v1) && !isNaN(v2) && isFinite(v2)) {
+      values1.push(v1);
+      values2.push(v2);
+    }
+  }
+  
+  return { values1, values2 };
+}
+
 function calculateNumericStats(column: string, values: number[], semanticType: string, unit?: string): NumericStats {
   if (values.length === 0) {
     return { column, semanticType, mean: 0, median: 0, min: 0, max: 0, stdDev: 0, total: 0, count: 0, unit };
@@ -248,19 +281,10 @@ function calculateNumericStats(column: string, values: number[], semanticType: s
 }
 
 function calculateCorrelation(col1: string, values1: number[], col2: string, values2: number[]): Correlation | null {
-  const minLength = Math.min(values1.length, values2.length);
-  if (minLength < 5) return null;
-
-  const pairs: [number, number][] = [];
-  for (let i = 0; i < minLength; i++) {
-    if (!isNaN(values1[i]) && !isNaN(values2[i])) {
-      pairs.push([values1[i], values2[i]]);
-    }
-  }
-  if (pairs.length < 5) return null;
+  if (values1.length !== values2.length || values1.length < 5) return null;
 
   try {
-    const r = ss.sampleCorrelation(pairs.map(p => p[0]), pairs.map(p => p[1]));
+    const r = ss.sampleCorrelation(values1, values2);
     if (isNaN(r)) return null;
 
     let strength: Correlation['strength'];
@@ -335,7 +359,12 @@ function performTTest(
   if (pooledSE === 0) return null;
   
   const tStatistic = (mean1 - mean2) / pooledSE;
-  const df = Math.min(n1 - 1, n2 - 1);
+  
+  const v1n1 = var1 / n1;
+  const v2n2 = var2 / n2;
+  const dfNumerator = (v1n1 + v2n2) ** 2;
+  const dfDenominator = (v1n1 ** 2) / (n1 - 1) + (v2n2 ** 2) / (n2 - 1);
+  const df = dfDenominator > 0 ? dfNumerator / dfDenominator : Math.min(n1 - 1, n2 - 1);
   
   const pValue = tDistributionPValue(Math.abs(tStatistic), df);
   const significant = pValue < 0.05;
@@ -602,8 +631,8 @@ function performPCA(
 
   return {
     type: 'pca',
-    title: `Principal Component Analysis`,
-    description: `Analyzed ${validCols.length} numeric columns. The top 3 variables (${topContributors.map(c => c.column).join(', ')}) explain ${topVariancePercent.toFixed(0)}% of the total variance, indicating they carry the most information in your dataset.`,
+    title: `Variance Analysis`,
+    description: `Analyzed ${validCols.length} numeric columns. The top 3 highest-variance variables are ${topContributors.map(c => c.column).join(', ')}, accounting for ${topVariancePercent.toFixed(0)}% of total standardized variance.`,
     details: {
       columnsAnalyzed: validCols.length,
       rowsAnalyzed: data.length,
@@ -693,29 +722,54 @@ function detectOutliers(column: string, rows: Record<string, string>[]): Outlier
 }
 
 function detectTrend(timeCol: string, valueCol: string, rows: Record<string, string>[]): Trend | null {
-  const values = getNumericValues(rows, valueCol);
-  if (values.length < 5) return null;
-
-  const firstHalf = values.slice(0, Math.floor(values.length / 2));
-  const secondHalf = values.slice(Math.floor(values.length / 2));
-  const firstAvg = ss.mean(firstHalf);
-  const secondAvg = ss.mean(secondHalf);
+  const sortedData: { time: number; value: number }[] = [];
+  
+  for (const row of rows) {
+    const timeVal = parseDateValue(row[timeCol] || '');
+    const numVal = cleanNumericValue(row[valueCol] || '');
+    
+    if (timeVal > 0 && !isNaN(numVal) && isFinite(numVal)) {
+      sortedData.push({ time: timeVal, value: numVal });
+    }
+  }
+  
+  if (sortedData.length < 5) return null;
+  
+  sortedData.sort((a, b) => a.time - b.time);
+  
+  const values = sortedData.map(d => d.value);
+  const n = values.length;
+  const xIndices = Array.from({ length: n }, (_, i) => i);
+  
+  const xMean = (n - 1) / 2;
+  const yMean = ss.mean(values);
+  
+  let numerator = 0;
+  let denominator = 0;
+  for (let i = 0; i < n; i++) {
+    numerator += (xIndices[i] - xMean) * (values[i] - yMean);
+    denominator += (xIndices[i] - xMean) ** 2;
+  }
+  
+  const slope = denominator !== 0 ? numerator / denominator : 0;
+  
   const overallStdDev = ss.standardDeviation(values);
-  const overallMean = ss.mean(values);
-
-  const percentChange = ((secondAvg - firstAvg) / Math.abs(firstAvg || 1)) * 100;
-  const volatility = overallStdDev / Math.abs(overallMean || 1);
-
+  const volatility = overallStdDev / Math.abs(yMean || 1);
+  
+  const firstValue = values[0];
+  const lastValue = values[n - 1];
+  const percentChange = ((lastValue - firstValue) / Math.abs(firstValue || 1)) * 100;
+  
   let direction: Trend['direction'];
   let description: string;
 
   if (volatility > 0.5) {
     direction = 'volatile';
     description = `${valueCol} fluctuates significantly over time.`;
-  } else if (percentChange > 10) {
+  } else if (slope > 0 && percentChange > 5) {
     direction = 'increasing';
     description = `${valueCol} grew by ${percentChange.toFixed(0)}% over the period.`;
-  } else if (percentChange < -10) {
+  } else if (slope < 0 && percentChange < -5) {
     direction = 'decreasing';
     description = `${valueCol} declined by ${Math.abs(percentChange).toFixed(0)}% over the period.`;
   } else {
@@ -1085,8 +1139,7 @@ export function analyzeData(parsedData: ParsedData, fileName: string): AnalysisR
   const meaningfulNumerics = numericColumns.filter(c => c.semanticType !== 'id' && c.cardinality > 5);
   for (let i = 0; i < meaningfulNumerics.length; i++) {
     for (let j = i + 1; j < meaningfulNumerics.length; j++) {
-      const values1 = getNumericValues(rows, meaningfulNumerics[i].name);
-      const values2 = getNumericValues(rows, meaningfulNumerics[j].name);
+      const { values1, values2 } = getPairedNumericValues(rows, meaningfulNumerics[i].name, meaningfulNumerics[j].name);
       const corr = calculateCorrelation(meaningfulNumerics[i].name, values1, meaningfulNumerics[j].name, values2);
       if (corr && corr.strength !== 'none') {
         correlations.push(corr);
