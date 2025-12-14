@@ -236,27 +236,34 @@ Sitemap: https://csvviz.com/sitemap.xml
         Object.entries(row).slice(0, 6).map(([k, v]) => `${k}: ${v}`).join(', ')
       ).join('\n') || '';
 
-      const prompt = `You are a data analyst. Give a brief, punchy summary of this dataset in 2-3 short paragraphs (max 150 words total).
+      const prompt = `You are a senior data analyst preparing an executive briefing. Provide a concise, professional analysis of this dataset in 2-3 paragraphs (max 150 words).
 
 Dataset: ${analysisResult.fileName} (${analysisResult.rowCount} rows, ${analysisResult.columnCount} columns)
 
 Columns: ${columnsSummary}
 
-Stats: ${statsSummary}
+Statistics: ${statsSummary}
 
 Trends: ${trendsSummary}
 
 Correlations: ${correlationsSummary}
 
-Sample: ${dataSample}
+Sample Data: ${dataSample}
 
-Write like you're telling a friend what you found. Lead with the most interesting insight. Be specific with numbers. Skip obvious observations.`;
+Guidelines:
+- Use formal, business-appropriate language
+- Lead with the most significant finding and its business implication
+- Cite specific metrics, percentages, and statistical values
+- Highlight actionable insights and potential areas of concern
+- Avoid casual phrases, humor, or conversational tone
+- Focus on data-driven observations and measurable outcomes
+- Structure findings clearly with emphasis on key takeaways`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
         max_tokens: 350,
-        temperature: 0.7,
+        temperature: 0.5,
       });
 
       const summary = response.choices[0]?.message?.content || 'Unable to generate summary';
