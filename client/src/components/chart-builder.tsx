@@ -9,12 +9,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, X, TrendingUp, BarChart2, Circle } from "lucide-react";
+import { Plus, X, TrendingUp, BarChart2, Circle, PieChart } from "lucide-react";
 import type { AnalysisResult, ChartConfig, ColumnInfo } from "@shared/schema";
 
 interface ExtendedChartConfig extends ChartConfig {
   yAxes?: string[];
   isCustom?: boolean;
+  aggregation?: AggregationType;
 }
 
 interface ChartBuilderProps {
@@ -22,12 +23,24 @@ interface ChartBuilderProps {
   onAddChart: (chart: ExtendedChartConfig) => void;
 }
 
-type ChartType = "line" | "bar" | "scatter";
+type ChartType = "line" | "bar" | "scatter" | "area" | "pie";
+type AggregationType = "none" | "sum" | "average" | "count" | "min" | "max";
 
-const CHART_TYPE_OPTIONS: { value: ChartType; label: string; icon: JSX.Element }[] = [
+const CHART_TYPE_OPTIONS: { value: ChartType; label: string; icon: JSX.Element; needsAgg?: boolean }[] = [
   { value: "line", label: "Line", icon: <TrendingUp className="w-3.5 h-3.5" /> },
   { value: "bar", label: "Bar", icon: <BarChart2 className="w-3.5 h-3.5" /> },
+  { value: "area", label: "Area", icon: <TrendingUp className="w-3.5 h-3.5" /> },
   { value: "scatter", label: "Scatter", icon: <Circle className="w-3.5 h-3.5" /> },
+  { value: "pie", label: "Pie / Donut", icon: <PieChart className="w-3.5 h-3.5" />, needsAgg: true },
+];
+
+const AGGREGATION_OPTIONS: { value: AggregationType; label: string }[] = [
+  { value: "none", label: "No aggregation (raw data)" },
+  { value: "sum", label: "Sum by group" },
+  { value: "average", label: "Average by group" },
+  { value: "count", label: "Count by group" },
+  { value: "min", label: "Minimum by group" },
+  { value: "max", label: "Maximum by group" },
 ];
 
 const MULTI_Y_COLORS = [
@@ -68,16 +81,85 @@ function suggestChartType(xColumn: ColumnInfo | undefined, yColumns: ColumnInfo[
   return "bar";
 }
 
+function aggregateData(
+  rawData: Record<string, string>[],
+  groupBy: string,
+  valueColumns: string[],
+  aggregation: AggregationType
+): Record<string, string | number>[] {
+  if (aggregation === "none") {
+    return rawData.slice(0, 100).map(row => {
+      const point: Record<string, string | number> = {};
+      point[groupBy] = row[groupBy];
+      valueColumns.forEach(col => {
+        const val = parseFloat(row[col]);
+        point[col] = isNaN(val) ? 0 : val;
+      });
+      return point;
+    });
+  }
+
+  const groups = new Map<string, { values: Record<string, number[]>; count: number }>();
+
+  for (const row of rawData) {
+    const key = row[groupBy] || "(empty)";
+    if (!groups.has(key)) {
+      groups.set(key, { values: {}, count: 0 });
+    }
+    const group = groups.get(key)!;
+    group.count++;
+
+    for (const col of valueColumns) {
+      if (!group.values[col]) group.values[col] = [];
+      const val = parseFloat(row[col]);
+      if (!isNaN(val)) group.values[col].push(val);
+    }
+  }
+
+  const result: Record<string, string | number>[] = [];
+
+  groups.forEach((group, key) => {
+    const point: Record<string, string | number> = { [groupBy]: key };
+
+    for (const col of valueColumns) {
+      const values = group.values[col] || [];
+      
+      if (aggregation === "count") {
+        point[col] = group.count;
+      } else if (values.length === 0) {
+        point[col] = 0;
+      } else if (aggregation === "sum") {
+        point[col] = values.reduce((a: number, b: number) => a + b, 0);
+      } else if (aggregation === "average") {
+        point[col] = values.reduce((a: number, b: number) => a + b, 0) / values.length;
+      } else if (aggregation === "min") {
+        point[col] = Math.min(...values);
+      } else if (aggregation === "max") {
+        point[col] = Math.max(...values);
+      }
+    }
+
+    result.push(point);
+  });
+
+  return result.slice(0, 50);
+}
+
 export function ChartBuilder({ result, onAddChart }: ChartBuilderProps) {
   const [xAxis, setXAxis] = useState<string>("");
   const [yAxes, setYAxes] = useState<string[]>([]);
   const [chartType, setChartType] = useState<ChartType>("bar");
+  const [aggregation, setAggregation] = useState<AggregationType>("none");
   const [isOpen, setIsOpen] = useState(false);
   const [ySelectKey, setYSelectKey] = useState(0);
 
   const allColumns = result.columns;
   const numericColumns = useMemo(
     () => allColumns.filter(c => c.baseType === "numeric"),
+    [allColumns]
+  );
+  const categoricalColumns = useMemo(
+    () => allColumns.filter(c => c.baseType === "categorical" || c.semanticType === "category"),
     [allColumns]
   );
 
@@ -89,11 +171,22 @@ export function ChartBuilder({ result, onAddChart }: ChartBuilderProps) {
     [xColumn, yColumnInfos]
   );
 
+  const showAggregation = useMemo(() => {
+    if (!xColumn) return false;
+    return xColumn.baseType === "categorical" || 
+           xColumn.semanticType === "category" ||
+           chartType === "pie";
+  }, [xColumn, chartType]);
+
   const handleXAxisChange = (value: string) => {
     setXAxis(value);
     const newXCol = allColumns.find(c => c.name === value);
     const newSuggested = suggestChartType(newXCol, yColumnInfos);
     setChartType(newSuggested);
+    
+    if (newXCol?.baseType === "categorical" && aggregation === "none") {
+      setAggregation("sum");
+    }
   };
 
   const handleAddYAxis = (value: string) => {
@@ -120,31 +213,25 @@ export function ChartBuilder({ result, onAddChart }: ChartBuilderProps) {
   const handleAddChart = () => {
     if (!xAxis || yAxes.length === 0 || !result.rawData) return;
 
-    const chartData = result.rawData.slice(0, 100).map(row => {
-      const point: Record<string, string | number> = {};
-      point[xAxis] = row[xAxis];
-      
-      yAxes.forEach(yCol => {
-        const val = parseFloat(row[yCol]);
-        point[yCol] = isNaN(val) ? 0 : val;
-      });
-      
-      return point;
-    });
+    const chartData = aggregateData(result.rawData, xAxis, yAxes, aggregation);
 
+    const aggLabel = aggregation !== "none" ? ` (${aggregation})` : "";
     const title = yAxes.length === 1 
-      ? `${yAxes[0]} by ${xAxis}`
-      : `${yAxes.join(", ")} by ${xAxis}`;
+      ? `${yAxes[0]}${aggLabel} by ${xAxis}`
+      : `${yAxes.join(", ")}${aggLabel} by ${xAxis}`;
+
+    const actualType = chartType;
 
     const newChart: ExtendedChartConfig = {
       id: `custom-${Date.now()}`,
-      type: chartType,
+      type: actualType as ChartConfig["type"],
       title,
       xAxis,
       yAxis: yAxes[0],
       yAxes: yAxes,
       data: chartData,
       priority: 0,
+      aggregation,
     };
 
     onAddChart(newChart);
@@ -152,6 +239,7 @@ export function ChartBuilder({ result, onAddChart }: ChartBuilderProps) {
     setXAxis("");
     setYAxes([]);
     setChartType("bar");
+    setAggregation("none");
     setIsOpen(false);
   };
 
@@ -171,7 +259,7 @@ export function ChartBuilder({ result, onAddChart }: ChartBuilderProps) {
 
   return (
     <div className="bg-muted/30 rounded-lg p-4 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-medium">Custom Chart Builder</h3>
         <Button
           variant="ghost"
@@ -185,7 +273,7 @@ export function ChartBuilder({ result, onAddChart }: ChartBuilderProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="x-axis" className="text-xs">X-Axis</Label>
+          <Label htmlFor="x-axis" className="text-xs">X-Axis / Group By</Label>
           <Select value={xAxis} onValueChange={handleXAxisChange}>
             <SelectTrigger id="x-axis" data-testid="select-x-axis">
               <SelectValue placeholder="Select column" />
@@ -229,7 +317,7 @@ export function ChartBuilder({ result, onAddChart }: ChartBuilderProps) {
       </div>
 
       <div className="space-y-2">
-        <Label className="text-xs">Y-Axis (numeric columns)</Label>
+        <Label className="text-xs">Y-Axis / Values (numeric columns)</Label>
         
         {yAxes.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2">
@@ -258,7 +346,7 @@ export function ChartBuilder({ result, onAddChart }: ChartBuilderProps) {
         {availableYColumns.length > 0 && (
           <Select key={ySelectKey} onValueChange={handleAddYAxis}>
             <SelectTrigger data-testid="select-y-axis">
-              <SelectValue placeholder={yAxes.length === 0 ? "Select Y-axis column(s)" : "Add another column"} />
+              <SelectValue placeholder={yAxes.length === 0 ? "Select value column(s)" : "Add another column"} />
             </SelectTrigger>
             <SelectContent>
               {availableYColumns.map(col => (
@@ -275,6 +363,30 @@ export function ChartBuilder({ result, onAddChart }: ChartBuilderProps) {
           </Select>
         )}
       </div>
+
+      {showAggregation && (
+        <div className="space-y-2">
+          <Label htmlFor="aggregation" className="text-xs">Aggregation</Label>
+          <Select value={aggregation} onValueChange={(v) => setAggregation(v as AggregationType)}>
+            <SelectTrigger id="aggregation" data-testid="select-aggregation">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {AGGREGATION_OPTIONS.map(opt => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {aggregation === "none" 
+              ? "Shows raw data points (first 100 rows)"
+              : `Groups data by ${xAxis || "selected column"} and calculates ${aggregation}`
+            }
+          </p>
+        </div>
+      )}
 
       <Button
         className="w-full"

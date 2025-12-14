@@ -208,6 +208,99 @@ Sitemap: https://csvviz.com/sitemap.xml
     }
   });
 
+  app.post('/api/reanalyze', async (req, res) => {
+    try {
+      const { rawData, fileName, columnTransforms, rowTransform } = req.body;
+      
+      if (!rawData || !Array.isArray(rawData) || rawData.length === 0) {
+        return res.status(400).json({ success: false, error: 'No data provided' });
+      }
+
+      let transformedRows = [...rawData] as Record<string, string>[];
+
+      if (rowTransform?.removeDuplicates) {
+        const seen = new Set<string>();
+        transformedRows = transformedRows.filter(row => {
+          const key = JSON.stringify(row);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      }
+
+      if (rowTransform?.missingValueAction === 'remove_rows') {
+        transformedRows = transformedRows.filter(row => 
+          Object.values(row).every(v => v !== '' && v !== null && v !== undefined)
+        );
+      }
+
+      const activeTransforms = (columnTransforms || []).filter((t: any) => !t.excluded);
+      const excludedColumns = (columnTransforms || []).filter((t: any) => t.excluded).map((t: any) => t.originalName);
+
+      if (rowTransform?.missingValueAction === 'fill_zero' || rowTransform?.missingValueAction === 'fill_mean') {
+        const numericCols = activeTransforms
+          .filter((t: any) => t.newType === 'numeric')
+          .map((t: any) => t.originalName);
+
+        if (rowTransform.missingValueAction === 'fill_mean') {
+          const means: Record<string, number> = {};
+          for (const col of numericCols) {
+            const values = transformedRows
+              .map(r => parseFloat(r[col]))
+              .filter(v => !isNaN(v));
+            means[col] = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+          }
+          transformedRows = transformedRows.map(row => {
+            const newRow = { ...row };
+            for (const col of numericCols) {
+              if (newRow[col] === '' || newRow[col] === null || newRow[col] === undefined) {
+                newRow[col] = String(means[col]);
+              }
+            }
+            return newRow;
+          });
+        } else {
+          transformedRows = transformedRows.map(row => {
+            const newRow = { ...row };
+            for (const col of numericCols) {
+              if (newRow[col] === '' || newRow[col] === null || newRow[col] === undefined) {
+                newRow[col] = '0';
+              }
+            }
+            return newRow;
+          });
+        }
+      }
+
+      const finalRows = transformedRows.map(row => {
+        const newRow: Record<string, string> = {};
+        for (const t of activeTransforms as any[]) {
+          newRow[t.newName] = row[t.originalName] ?? '';
+        }
+        return newRow;
+      });
+
+      const headers = activeTransforms.map((t: any) => t.newName);
+
+      if (headers.length === 0 || finalRows.length === 0) {
+        return res.status(400).json({ success: false, error: 'No data after transformations' });
+      }
+
+      const result = analyzeData(
+        { headers, rows: finalRows },
+        fileName || 'transformed_data.csv'
+      );
+
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error('Reanalyze error:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to reanalyze data'
+      });
+    }
+  });
+
   app.post('/api/generate-summary', async (req, res) => {
     try {
       const { analysisResult } = req.body as { analysisResult: AnalysisResult };

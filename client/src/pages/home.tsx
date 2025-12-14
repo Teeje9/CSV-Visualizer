@@ -5,9 +5,11 @@ import { ChartsPanel } from "@/components/charts-panel";
 import { Header } from "@/components/header";
 import { PdfExport } from "@/components/pdf-export";
 import { MetaTags } from "@/components/meta-tags";
+import { DataPrepPanel, type DataPrepState } from "@/components/data-prep-panel";
 import { getVariant, type LandingVariant } from "@/lib/seo-config";
 import { sampleDatasets } from "@/lib/sample-data";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import type { AnalysisResult } from "@shared/schema";
 import { BarChart3, Sparkles, Calculator, FileDown, FileSpreadsheet, Loader2 } from "lucide-react";
 
@@ -17,22 +19,103 @@ interface HomeProps {
 
 const featureIcons = [BarChart3, Sparkles, Calculator, FileDown];
 
+type AppStage = "upload" | "prep" | "results";
+
+interface PrepData {
+  result: AnalysisResult;
+  duplicateCount: number;
+}
+
 export default function Home({ variantSlug = "default" }: HomeProps) {
+  const [stage, setStage] = useState<AppStage>("upload");
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [prepData, setPrepData] = useState<PrepData | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [loadingSampleId, setLoadingSampleId] = useState<string | null>(null);
   const chartsContainerRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
   
   const variant: LandingVariant = getVariant(variantSlug);
 
+  const countDuplicates = (rows: Record<string, string>[]): number => {
+    const seen = new Set<string>();
+    let dupeCount = 0;
+    for (const row of rows) {
+      const key = JSON.stringify(row);
+      if (seen.has(key)) {
+        dupeCount++;
+      } else {
+        seen.add(key);
+      }
+    }
+    return dupeCount;
+  };
+
   const handleAnalysisComplete = (result: AnalysisResult) => {
-    setAnalysisResult(result);
     setIsAnalyzing(false);
     setLoadingSampleId(null);
+    
+    if (result.rawData && result.rawData.length > 0) {
+      const dupeCount = countDuplicates(result.rawData);
+      setPrepData({ result, duplicateCount: dupeCount });
+      setStage("prep");
+    } else {
+      setAnalysisResult(result);
+      setStage("results");
+    }
+  };
+
+  const handleSkipPrep = () => {
+    if (prepData) {
+      setAnalysisResult(prepData.result);
+      setStage("results");
+    }
+  };
+
+  const handleApplyTransforms = async (state: DataPrepState) => {
+    if (!prepData) return;
+    
+    setIsAnalyzing(true);
+    
+    try {
+      const response = await fetch('/api/reanalyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rawData: prepData.result.rawData,
+          fileName: prepData.result.fileName,
+          columnTransforms: state.columnTransforms,
+          rowTransform: state.rowTransform,
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (response.ok && result.success) {
+        setAnalysisResult(result.data);
+        setStage("results");
+      } else {
+        toast({
+          title: "Transform Error",
+          description: result.error || "Failed to apply transformations",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to re-analyze data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const handleNewUpload = () => {
     setAnalysisResult(null);
+    setPrepData(null);
+    setStage("upload");
     setIsAnalyzing(false);
     setLoadingSampleId(null);
   };
@@ -74,7 +157,36 @@ export default function Home({ variantSlug = "default" }: HomeProps) {
     }
   };
 
-  if (!analysisResult) {
+  if (stage === "prep" && prepData) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <MetaTags variant={variant} />
+        <Header 
+          onNewUpload={handleNewUpload} 
+          showNewUpload={true} 
+          fileName={prepData.result.fileName}
+        />
+        <main className="flex-1 overflow-y-auto">
+          {isAnalyzing ? (
+            <div className="flex items-center justify-center h-64">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              <span className="ml-3 text-muted-foreground">Applying transformations...</span>
+            </div>
+          ) : (
+            <DataPrepPanel
+              columns={prepData.result.columns}
+              rawData={prepData.result.rawData || []}
+              duplicateCount={prepData.duplicateCount}
+              onApplyTransforms={handleApplyTransforms}
+              onSkip={handleSkipPrep}
+            />
+          )}
+        </main>
+      </div>
+    );
+  }
+
+  if (stage === "upload") {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <MetaTags variant={variant} />
@@ -173,6 +285,10 @@ export default function Home({ variantSlug = "default" }: HomeProps) {
         </main>
       </div>
     );
+  }
+
+  if (!analysisResult) {
+    return null;
   }
 
   return (
