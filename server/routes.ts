@@ -43,6 +43,43 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  app.get('/robots.txt', (req, res) => {
+    res.type('text/plain');
+    res.send(`User-agent: *
+Allow: /
+
+Sitemap: https://csvviz.com/sitemap.xml
+`);
+  });
+
+  app.get('/sitemap.xml', (req, res) => {
+    res.type('application/xml');
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://csvviz.com/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://csvviz.com/csv-charts</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://csvviz.com/excel-analysis</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://csvviz.com/sales-dashboard</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+</urlset>
+`);
+  });
+
   app.post('/api/sheets', upload.single('file'), async (req, res) => {
     try {
       if (!req.file) {
