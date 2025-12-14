@@ -1104,7 +1104,7 @@ function generateSemanticInsights(
   return insights.slice(0, 8);
 }
 
-export function analyzeData(parsedData: ParsedData, fileName: string): AnalysisResult {
+export function analyzeData(parsedData: ParsedData, fileName: string, uniqueColumns: string[] = []): AnalysisResult {
   const { headers, rows } = parsedData;
 
   const columns: ColumnInfo[] = headers.map(header => {
@@ -1113,10 +1113,13 @@ export function analyzeData(parsedData: ParsedData, fileName: string): AnalysisR
     const uniqueValues = new Set(nonEmpty);
     const { baseType, semanticType, format, unit } = detectSemanticType(values, header);
     
+    // Override semanticType to 'id' if column is marked as unique/identifier
+    const finalSemanticType = uniqueColumns.includes(header) ? 'id' : semanticType;
+    
     return {
       name: header,
       baseType,
-      semanticType,
+      semanticType: finalSemanticType,
       format,
       unit,
       cardinality: uniqueValues.size,

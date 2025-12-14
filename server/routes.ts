@@ -237,9 +237,41 @@ Sitemap: https://csvviz.com/sitemap.xml
       const activeTransforms = (columnTransforms || []).filter((t: any) => !t.excluded);
       const excludedColumns = (columnTransforms || []).filter((t: any) => t.excluded).map((t: any) => t.originalName);
 
+      // Apply per-column cleaning transformations
+      transformedRows = transformedRows.map(row => {
+        const newRow = { ...row };
+        for (const t of activeTransforms as any[]) {
+          let value = newRow[t.originalName] ?? '';
+          
+          // Trim whitespace
+          if (t.trimWhitespace && typeof value === 'string') {
+            value = value.trim();
+          }
+          
+          // Strip non-numeric characters (for numeric columns)
+          if (t.stripNonNumeric && t.newType === 'numeric' && typeof value === 'string') {
+            // Keep only digits, decimal points, minus signs, and scientific notation
+            value = value.replace(/[^0-9.\-eE]/g, '');
+            // Clean up multiple decimal points or minus signs
+            const parts = value.split('.');
+            if (parts.length > 2) {
+              value = parts[0] + '.' + parts.slice(1).join('');
+            }
+          }
+          
+          // Custom fill value for empty cells
+          if (t.customFillValue && (value === '' || value === null || value === undefined)) {
+            value = t.customFillValue;
+          }
+          
+          newRow[t.originalName] = value;
+        }
+        return newRow;
+      });
+
       if (rowTransform?.missingValueAction === 'fill_zero' || rowTransform?.missingValueAction === 'fill_mean') {
         const numericCols = activeTransforms
-          .filter((t: any) => t.newType === 'numeric')
+          .filter((t: any) => t.newType === 'numeric' && !t.customFillValue)
           .map((t: any) => t.originalName);
 
         if (rowTransform.missingValueAction === 'fill_mean') {
@@ -281,6 +313,11 @@ Sitemap: https://csvviz.com/sitemap.xml
       });
 
       const headers = activeTransforms.map((t: any) => t.newName);
+      
+      // Collect columns marked as unique/ID for special handling
+      const uniqueColumns = activeTransforms
+        .filter((t: any) => t.treatAsUnique)
+        .map((t: any) => t.newName);
 
       if (headers.length === 0 || finalRows.length === 0) {
         return res.status(400).json({ success: false, error: 'No data after transformations' });
@@ -288,7 +325,8 @@ Sitemap: https://csvviz.com/sitemap.xml
 
       const result = analyzeData(
         { headers, rows: finalRows },
-        fileName || 'transformed_data.csv'
+        fileName || 'transformed_data.csv',
+        uniqueColumns
       );
 
       res.json({ success: true, data: result });

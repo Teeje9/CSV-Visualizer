@@ -34,7 +34,13 @@ import {
   AlertTriangle,
   RefreshCw,
   ArrowRight,
-  Trash2
+  Trash2,
+  Settings,
+  ChevronDown,
+  ChevronUp,
+  Hash,
+  Scissors,
+  Key
 } from "lucide-react";
 import type { ColumnInfo, BaseType } from "@shared/schema";
 
@@ -43,6 +49,10 @@ export interface ColumnTransform {
   newName: string;
   newType: BaseType;
   excluded: boolean;
+  stripNonNumeric: boolean;
+  treatAsUnique: boolean;
+  trimWhitespace: boolean;
+  customFillValue?: string;
 }
 
 export interface RowTransform {
@@ -92,8 +102,14 @@ export function DataPrepPanel({
       newName: col.name,
       newType: col.baseType,
       excluded: false,
+      stripNonNumeric: false,
+      treatAsUnique: false,
+      trimWhitespace: false,
+      customFillValue: undefined,
     }))
   );
+
+  const [expandedColumn, setExpandedColumn] = useState<string | null>(null);
 
   const [rowTransform, setRowTransform] = useState<RowTransform>({
     removeDuplicates: false,
@@ -153,6 +169,26 @@ export function DataPrepPanel({
     );
   };
 
+  const handleToggleCleaningOption = (originalName: string, option: 'stripNonNumeric' | 'treatAsUnique' | 'trimWhitespace') => {
+    setColumnTransforms(prev =>
+      prev.map(t =>
+        t.originalName === originalName ? { ...t, [option]: !t[option] } : t
+      )
+    );
+  };
+
+  const handleCustomFillChange = (originalName: string, value: string) => {
+    setColumnTransforms(prev =>
+      prev.map(t =>
+        t.originalName === originalName ? { ...t, customFillValue: value || undefined } : t
+      )
+    );
+  };
+
+  const toggleExpandColumn = (colName: string) => {
+    setExpandedColumn(prev => prev === colName ? null : colName);
+  };
+
   const handleApply = () => {
     onApplyTransforms({
       columnTransforms,
@@ -165,7 +201,11 @@ export function DataPrepPanel({
       (t, i) =>
         t.newName !== columns[i].name ||
         t.newType !== columns[i].baseType ||
-        t.excluded
+        t.excluded ||
+        t.stripNonNumeric ||
+        t.treatAsUnique ||
+        t.trimWhitespace ||
+        t.customFillValue
     );
     const hasRowChanges =
       rowTransform.removeDuplicates ||
@@ -224,7 +264,8 @@ export function DataPrepPanel({
                   <TableHead className="w-[120px]">Type</TableHead>
                   <TableHead>Sample Values</TableHead>
                   <TableHead className="w-[100px] text-right">Missing</TableHead>
-                  <TableHead className="w-[80px] text-center">Include</TableHead>
+                  <TableHead className="w-[60px] text-center">Clean</TableHead>
+                  <TableHead className="w-[70px] text-center">Include</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -232,145 +273,232 @@ export function DataPrepPanel({
                   const transform = columnTransforms[idx];
                   const isEditing = editingColumn === col.name;
                   const isExcluded = transform.excluded;
+                  const isExpanded = expandedColumn === col.name;
+                  const hasCleaningOptions = transform.stripNonNumeric || transform.trimWhitespace || transform.treatAsUnique || transform.customFillValue;
+                  const isNumericType = transform.newType === 'numeric';
 
                   return (
-                    <TableRow
-                      key={col.name}
-                      className={isExcluded ? "opacity-50" : ""}
-                      data-testid={`row-column-${col.name}`}
-                    >
-                      <TableCell>
-                        {isEditing ? (
-                          <div className="flex items-center gap-1">
-                            <Input
-                              value={editingName}
-                              onChange={e => setEditingName(e.target.value)}
-                              className="h-7 text-sm"
-                              autoFocus
-                              onKeyDown={e => {
-                                if (e.key === "Enter") handleSaveEdit(col.name);
-                                if (e.key === "Escape") handleCancelEdit();
-                              }}
-                              data-testid={`input-rename-${col.name}`}
-                            />
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7"
-                              onClick={() => handleSaveEdit(col.name)}
-                              data-testid={`button-save-rename-${col.name}`}
-                            >
-                              <Check className="w-3 h-3" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7"
-                              onClick={handleCancelEdit}
-                            >
-                              <X className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-sm truncate max-w-[140px]">
-                              {transform.newName}
-                            </span>
-                            {transform.newName !== col.name && (
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <Badge variant="outline" className="text-[10px] px-1">
-                                    renamed
-                                  </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  Original: {col.name}
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:opacity-100"
-                              onClick={() => handleStartEdit(col.name, transform.newName)}
-                              data-testid={`button-edit-${col.name}`}
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Select
-                          value={transform.newType}
-                          onValueChange={(v) => handleTypeChange(col.name, v as BaseType)}
-                          disabled={isExcluded}
-                        >
-                          <SelectTrigger 
-                            className="h-7 text-xs w-[100px]"
-                            data-testid={`select-type-${col.name}`}
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {BASE_TYPE_OPTIONS.map(opt => (
-                              <SelectItem key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {transform.newType !== col.baseType && (
-                          <Badge 
-                            variant="outline" 
-                            className="text-[10px] px-1 mt-1 block w-fit"
-                          >
-                            was: {col.baseType}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {col.sampleValues.slice(0, 3).map((val, i) => (
-                            <Badge
-                              key={i}
-                              variant={getTypeBadgeVariant(col.baseType)}
-                              className="text-[10px] font-mono max-w-[100px] truncate"
-                            >
-                              {val}
-                            </Badge>
-                          ))}
-                          {col.sampleValues.length > 3 && (
-                            <span className="text-xs text-muted-foreground">
-                              +{col.sampleValues.length - 3} more
-                            </span>
+                    <>
+                      <TableRow
+                        key={col.name}
+                        className={isExcluded ? "opacity-50" : ""}
+                        data-testid={`row-column-${col.name}`}
+                      >
+                        <TableCell>
+                          {isEditing ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                value={editingName}
+                                onChange={e => setEditingName(e.target.value)}
+                                className="h-7 text-sm"
+                                autoFocus
+                                onKeyDown={e => {
+                                  if (e.key === "Enter") handleSaveEdit(col.name);
+                                  if (e.key === "Escape") handleCancelEdit();
+                                }}
+                                data-testid={`input-rename-${col.name}`}
+                              />
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleSaveEdit(col.name)}
+                                data-testid={`button-save-rename-${col.name}`}
+                              >
+                                <Check className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={handleCancelEdit}
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-sm truncate max-w-[140px]">
+                                {transform.newName}
+                              </span>
+                              {transform.newName !== col.name && (
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="outline" className="text-[10px] px-1">
+                                      renamed
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    Original: {col.name}
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleStartEdit(col.name, transform.newName)}
+                                data-testid={`button-edit-${col.name}`}
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </Button>
+                            </div>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {col.missingCount > 0 ? (
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Badge variant="destructive" className="text-xs">
-                                {col.missingCount}
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={transform.newType}
+                            onValueChange={(v) => handleTypeChange(col.name, v as BaseType)}
+                            disabled={isExcluded}
+                          >
+                            <SelectTrigger 
+                              className="h-7 text-xs w-[100px]"
+                              data-testid={`select-type-${col.name}`}
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {BASE_TYPE_OPTIONS.map(opt => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {transform.newType !== col.baseType && (
+                            <Badge 
+                              variant="outline" 
+                              className="text-[10px] px-1 mt-1 block w-fit"
+                            >
+                              was: {col.baseType}
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {col.sampleValues.slice(0, 3).map((val, i) => (
+                              <Badge
+                                key={i}
+                                variant={getTypeBadgeVariant(col.baseType)}
+                                className="text-[10px] font-mono max-w-[100px] truncate"
+                              >
+                                {val}
                               </Badge>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {col.missingPercent.toFixed(1)}% missing
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">0</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Checkbox
-                          checked={!isExcluded}
-                          onCheckedChange={() => handleToggleExclude(col.name)}
-                          data-testid={`checkbox-include-${col.name}`}
-                        />
-                      </TableCell>
-                    </TableRow>
+                            ))}
+                            {col.sampleValues.length > 3 && (
+                              <span className="text-xs text-muted-foreground">
+                                +{col.sampleValues.length - 3} more
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {col.missingCount > 0 ? (
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Badge variant="destructive" className="text-xs">
+                                  {col.missingCount}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {col.missingPercent.toFixed(1)}% missing
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">0</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            size="icon"
+                            variant={hasCleaningOptions ? "default" : "ghost"}
+                            onClick={() => toggleExpandColumn(col.name)}
+                            disabled={isExcluded}
+                            data-testid={`button-clean-${col.name}`}
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="w-3 h-3" />
+                            ) : (
+                              <Settings className="w-3 h-3" />
+                            )}
+                          </Button>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Checkbox
+                            checked={!isExcluded}
+                            onCheckedChange={() => handleToggleExclude(col.name)}
+                            data-testid={`checkbox-include-${col.name}`}
+                          />
+                        </TableCell>
+                      </TableRow>
+                      {isExpanded && !isExcluded && (
+                        <TableRow key={`${col.name}-options`} className="bg-muted/30">
+                          <TableCell colSpan={6} className="py-3">
+                            <div className="flex flex-wrap items-start gap-4 pl-2">
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  id={`trim-${col.name}`}
+                                  checked={transform.trimWhitespace}
+                                  onCheckedChange={() => handleToggleCleaningOption(col.name, 'trimWhitespace')}
+                                  data-testid={`checkbox-trim-${col.name}`}
+                                />
+                                <Label htmlFor={`trim-${col.name}`} className="text-sm cursor-pointer flex items-center gap-1">
+                                  <Scissors className="w-3 h-3" />
+                                  Trim whitespace
+                                </Label>
+                              </div>
+                              
+                              {isNumericType && (
+                                <div className="flex items-center gap-2">
+                                  <Checkbox
+                                    id={`strip-${col.name}`}
+                                    checked={transform.stripNonNumeric}
+                                    onCheckedChange={() => handleToggleCleaningOption(col.name, 'stripNonNumeric')}
+                                    data-testid={`checkbox-strip-${col.name}`}
+                                  />
+                                  <Label htmlFor={`strip-${col.name}`} className="text-sm cursor-pointer flex items-center gap-1">
+                                    <Hash className="w-3 h-3" />
+                                    Strip non-numeric
+                                  </Label>
+                                </div>
+                              )}
+                              
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  id={`unique-${col.name}`}
+                                  checked={transform.treatAsUnique}
+                                  onCheckedChange={() => handleToggleCleaningOption(col.name, 'treatAsUnique')}
+                                  data-testid={`checkbox-unique-${col.name}`}
+                                />
+                                <Label htmlFor={`unique-${col.name}`} className="text-sm cursor-pointer flex items-center gap-1">
+                                  <Key className="w-3 h-3" />
+                                  Treat as ID
+                                </Label>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="outline" className="text-[10px]">?</Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    Excludes this column from aggregations (useful for unique identifiers)
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+
+                              {col.missingCount > 0 && (
+                                <div className="flex items-center gap-2">
+                                  <Label htmlFor={`fill-${col.name}`} className="text-sm">Fill empty with:</Label>
+                                  <Input
+                                    id={`fill-${col.name}`}
+                                    value={transform.customFillValue || ''}
+                                    onChange={(e) => handleCustomFillChange(col.name, e.target.value)}
+                                    className="h-7 w-24 text-sm"
+                                    placeholder="value"
+                                    data-testid={`input-fill-${col.name}`}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
                   );
                 })}
               </TableBody>
