@@ -161,22 +161,72 @@ Sitemap: https://csvviz.com/sitemap.xml
       } else {
         const content = req.file.buffer.toString('utf-8');
         
-        const parsed = Papa.parse(content, {
-          header: true,
+        // First parse without headers to detect title rows
+        const rawParsed = Papa.parse(content, {
+          header: false,
           skipEmptyLines: true,
-          transformHeader: (header) => header.trim(),
         });
-
-        if (parsed.errors.length > 0 && parsed.data.length === 0) {
+        
+        if (rawParsed.errors.length > 0 && rawParsed.data.length === 0) {
           const response: UploadResponse = {
             success: false,
             error: 'Failed to parse CSV file. Please check the file format.'
           };
           return res.status(400).json(response);
         }
-
-        headers = parsed.meta.fields || [];
-        rows = parsed.data as Record<string, string>[];
+        
+        const rawRows = rawParsed.data as string[][];
+        if (rawRows.length < 2) {
+          const response: UploadResponse = {
+            success: false,
+            error: 'The file appears to be empty or has insufficient data.'
+          };
+          return res.status(400).json(response);
+        }
+        
+        // Detect if first row is a title row (mostly empty, single value, or doesn't look like headers)
+        const firstRow = rawRows[0];
+        const secondRow = rawRows[1];
+        const nonEmptyInFirst = firstRow.filter(v => v && v.trim() !== '').length;
+        const nonEmptyInSecond = secondRow.filter(v => v && v.trim() !== '').length;
+        
+        // If first row has only 1-2 non-empty values and second row has significantly more,
+        // treat first row as a title and use second row as headers
+        const isTitleRow = nonEmptyInFirst <= 2 && nonEmptyInSecond > nonEmptyInFirst * 2;
+        
+        let headerRow: string[];
+        let dataRows: string[][];
+        
+        if (isTitleRow) {
+          headerRow = secondRow.map(h => (h || '').trim());
+          dataRows = rawRows.slice(2);
+        } else {
+          headerRow = firstRow.map(h => (h || '').trim());
+          dataRows = rawRows.slice(1);
+        }
+        
+        // Generate unique header names for empty/duplicate headers
+        const usedNames = new Set<string>();
+        headers = headerRow.map((h, i) => {
+          let name = h || `Column${i + 1}`;
+          let originalName = name;
+          let counter = 2;
+          while (usedNames.has(name)) {
+            name = `${originalName}_${counter}`;
+            counter++;
+          }
+          usedNames.add(name);
+          return name;
+        });
+        
+        // Convert data rows to record objects
+        rows = dataRows.map(row => {
+          const record: Record<string, string> = {};
+          headers.forEach((header, i) => {
+            record[header] = (row[i] || '').trim();
+          });
+          return record;
+        });
       }
 
       if (headers.length === 0 || rows.length === 0) {
