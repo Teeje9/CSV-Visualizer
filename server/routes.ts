@@ -599,6 +599,31 @@ Sitemap: https://csvviz.com/sitemap.xml
         return res.status(400).json({ success: false, error: 'No value columns selected' });
       }
 
+      // Validate that at least some value columns contain numeric data
+      const numericCheckSample = rawData.slice(0, 20);
+      let hasAnyNumeric = false;
+      for (const valueCol of valueColumns) {
+        for (const row of numericCheckSample) {
+          const val = row[valueCol];
+          if (val && val !== '') {
+            // Strip common non-numeric characters and check if parseable
+            const cleaned = String(val).replace(/[$,€£¥%\s]/g, '');
+            if (!isNaN(parseFloat(cleaned))) {
+              hasAnyNumeric = true;
+              break;
+            }
+          }
+        }
+        if (hasAnyNumeric) break;
+      }
+      
+      if (!hasAnyNumeric) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Selected value columns do not appear to contain numeric data. Please select columns with numeric values.' 
+        });
+      }
+
       // Transform wide format to long format (unpivot)
       const pivotedRows: Record<string, string>[] = [];
       

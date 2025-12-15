@@ -145,6 +145,11 @@ export default function Home({ variantSlug = "default" }: HomeProps) {
       
       if (response.ok && result.success) {
         setAnalysisResult(result.data);
+        // Update prepData with the reshaped data so any future prep operations are in sync
+        setPrepData({
+          result: result.data,
+          duplicateCount: 0, // Reshaped data shouldn't have duplicates
+        });
         setStage("results");
       } else {
         toast({
