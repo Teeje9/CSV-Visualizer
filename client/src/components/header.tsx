@@ -1,6 +1,7 @@
-import { BarChart3, Upload, FileText } from "lucide-react";
+import { BarChart3, Upload, FileText, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Link } from "wouter";
 
 interface HeaderProps {
   onNewUpload: () => void;
@@ -44,6 +45,17 @@ export function Header({ onNewUpload, showNewUpload, fileName, exportButton }: H
             New Upload
           </Button>
         )}
+        <Link href="/pricing">
+          <Button 
+            variant="outline" 
+            size="sm"
+            className="border-amber-500/50 text-amber-600 dark:text-amber-400"
+            data-testid="button-upgrade"
+          >
+            <Crown className="w-4 h-4 mr-2" />
+            Upgrade
+          </Button>
+        </Link>
       </div>
     </header>
   );
