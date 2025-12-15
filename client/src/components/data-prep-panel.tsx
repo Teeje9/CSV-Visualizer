@@ -40,7 +40,10 @@ import {
   ChevronUp,
   Hash,
   Scissors,
-  Key
+  Key,
+  Columns,
+  RotateCw,
+  Loader2
 } from "lucide-react";
 import type { ColumnInfo, BaseType } from "@shared/schema";
 
@@ -65,12 +68,20 @@ export interface DataPrepState {
   rowTransform: RowTransform;
 }
 
+export interface PivotConfig {
+  enabled: boolean;
+  idColumns: string[];
+  valueColumns: string[];
+}
+
 interface DataPrepPanelProps {
   columns: ColumnInfo[];
   rawData: Record<string, string>[];
   duplicateCount: number;
   onApplyTransforms: (state: DataPrepState) => void;
+  onPivot?: (idColumns: string[], valueColumns: string[]) => void;
   onSkip: () => void;
+  isPivoting?: boolean;
 }
 
 const BASE_TYPE_OPTIONS: { value: BaseType; label: string }[] = [
@@ -94,7 +105,9 @@ export function DataPrepPanel({
   rawData,
   duplicateCount,
   onApplyTransforms,
+  onPivot,
   onSkip,
+  isPivoting = false,
 }: DataPrepPanelProps) {
   const [columnTransforms, setColumnTransforms] = useState<ColumnTransform[]>(
     columns.map(col => ({
@@ -118,6 +131,10 @@ export function DataPrepPanel({
 
   const [editingColumn, setEditingColumn] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  
+  const [pivotEnabled, setPivotEnabled] = useState(false);
+  const [pivotIdColumns, setPivotIdColumns] = useState<string[]>([]);
+  const [pivotValueColumns, setPivotValueColumns] = useState<string[]>([]);
 
   const columnsWithMissing = useMemo(
     () => columns.filter(c => c.missingCount > 0),
@@ -214,6 +231,51 @@ export function DataPrepPanel({
   }, [columnTransforms, columns, rowTransform]);
 
   const excludedCount = columnTransforms.filter(t => t.excluded).length;
+  
+  const handlePivotIdToggle = (colName: string) => {
+    setPivotIdColumns(prev => 
+      prev.includes(colName) 
+        ? prev.filter(c => c !== colName)
+        : [...prev, colName]
+    );
+    if (pivotValueColumns.includes(colName)) {
+      setPivotValueColumns(prev => prev.filter(c => c !== colName));
+    }
+  };
+
+  const handlePivotValueToggle = (colName: string) => {
+    setPivotValueColumns(prev => 
+      prev.includes(colName) 
+        ? prev.filter(c => c !== colName)
+        : [...prev, colName]
+    );
+    if (pivotIdColumns.includes(colName)) {
+      setPivotIdColumns(prev => prev.filter(c => c !== colName));
+    }
+  };
+
+  const handleApplyPivot = () => {
+    if (onPivot && pivotIdColumns.length > 0 && pivotValueColumns.length > 0) {
+      onPivot(pivotIdColumns, pivotValueColumns);
+    }
+  };
+
+  const estimatedPivotRows = useMemo(() => {
+    if (!pivotEnabled || pivotValueColumns.length === 0) return 0;
+    return rawData.length * pivotValueColumns.length;
+  }, [pivotEnabled, pivotValueColumns.length, rawData.length]);
+  
+  const hasNumericValueColumns = useMemo(() => {
+    if (pivotValueColumns.length === 0) return false;
+    // Check if at least one value column has numeric-looking data
+    return pivotValueColumns.some(colName => {
+      const sampleValues = rawData.slice(0, 10).map(row => row[colName]).filter(Boolean);
+      return sampleValues.some(v => !isNaN(parseFloat(String(v).replace(/[,$%]/g, ''))));
+    });
+  }, [pivotValueColumns, rawData]);
+  
+  const canPivot = pivotIdColumns.length > 0 && pivotValueColumns.length > 0 && hasNumericValueColumns;
+  const showPivotOption = columns.length > 10;
 
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
@@ -579,6 +641,156 @@ export function DataPrepPanel({
           )}
         </CardContent>
       </Card>
+
+      {showPivotOption && onPivot && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Columns className="w-4 h-4" />
+              Reshape Data (Unpivot)
+              <Badge variant="outline" className="ml-2 text-xs">
+                Wide to Long
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Your data has {columns.length} columns. Use this to convert weekly/monthly columns into rows for better time series analysis.
+            </p>
+            
+            <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-md">
+              <Checkbox
+                id="enable-pivot"
+                checked={pivotEnabled}
+                onCheckedChange={(checked) => setPivotEnabled(checked === true)}
+                data-testid="checkbox-enable-pivot"
+              />
+              <Label htmlFor="enable-pivot" className="cursor-pointer">
+                Enable data reshaping
+              </Label>
+            </div>
+
+            {pivotEnabled && (
+              <div className="space-y-4 pt-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 border rounded-md">
+                    <h4 className="text-sm font-medium mb-2">Keep as Identifiers</h4>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      These columns stay as-is (e.g., Company, Contact)
+                    </p>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {columns.slice(0, 20).map(col => (
+                        <div key={col.name} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`id-${col.name}`}
+                            checked={pivotIdColumns.includes(col.name)}
+                            onCheckedChange={() => handlePivotIdToggle(col.name)}
+                            data-testid={`checkbox-pivot-id-${col.name}`}
+                          />
+                          <Label 
+                            htmlFor={`id-${col.name}`} 
+                            className="text-sm cursor-pointer truncate"
+                            title={col.name}
+                          >
+                            {col.name}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                    {pivotIdColumns.length > 0 && (
+                      <Badge variant="secondary" className="mt-2">
+                        {pivotIdColumns.length} selected
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="p-4 border rounded-md">
+                    <h4 className="text-sm font-medium mb-2">Convert to Rows</h4>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      These become Period + Value columns (e.g., weekly data)
+                    </p>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {columns.slice(0, 50).map(col => {
+                        if (pivotIdColumns.includes(col.name)) return null;
+                        return (
+                          <div key={col.name} className="flex items-center gap-2">
+                            <Checkbox
+                              id={`val-${col.name}`}
+                              checked={pivotValueColumns.includes(col.name)}
+                              onCheckedChange={() => handlePivotValueToggle(col.name)}
+                              data-testid={`checkbox-pivot-val-${col.name}`}
+                            />
+                            <Label 
+                              htmlFor={`val-${col.name}`} 
+                              className="text-sm cursor-pointer truncate"
+                              title={col.name}
+                            >
+                              {col.name}
+                            </Label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {pivotValueColumns.length > 0 && (
+                      <Badge variant="secondary" className="mt-2">
+                        {pivotValueColumns.length} selected
+                      </Badge>
+                    )}
+                    {columns.length > 50 && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Showing first 50 of {columns.length} columns
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {pivotValueColumns.length > 0 && !hasNumericValueColumns && (
+                  <div className="p-3 bg-destructive/10 rounded-md text-sm text-destructive">
+                    Selected columns don't appear to contain numeric data. Please select columns with numeric values.
+                  </div>
+                )}
+
+                {canPivot && (
+                  <div className="p-3 bg-primary/10 rounded-md text-sm space-y-1">
+                    <p>
+                      This will create a new dataset with {pivotIdColumns.length + 2} columns 
+                      (your {pivotIdColumns.length} identifier columns + Period + Value).
+                    </p>
+                    <p className="text-muted-foreground">
+                      Estimated {estimatedPivotRows.toLocaleString()} rows 
+                      ({rawData.length} original rows x {pivotValueColumns.length} value columns)
+                    </p>
+                    {estimatedPivotRows > 50000 && (
+                      <p className="text-amber-600 dark:text-amber-400 font-medium">
+                        Large dataset warning: This may take a while to process.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <Button
+                  onClick={handleApplyPivot}
+                  disabled={!canPivot || isPivoting}
+                  className="w-full md:w-auto"
+                  data-testid="button-apply-pivot"
+                >
+                  {isPivoting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Reshaping...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCw className="w-4 h-4 mr-2" />
+                      Reshape & Analyze
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex items-center justify-end gap-2 pt-2">
         <Button

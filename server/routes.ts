@@ -81,6 +81,198 @@ Sitemap: https://csvviz.com/sitemap.xml
 `);
   });
 
+  // Preview endpoint - returns raw rows without parsing headers
+  app.post('/api/preview', upload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ success: false, error: 'No file uploaded' });
+      }
+
+      const ext = req.file.originalname.toLowerCase().slice(req.file.originalname.lastIndexOf('.'));
+      const selectedSheet = req.body?.sheet as string | undefined;
+      let rawRows: string[][] = [];
+      let sheets: string[] | null = null;
+
+      if (ext === '.xlsx' || ext === '.xls') {
+        const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+        sheets = workbook.SheetNames.length > 1 ? workbook.SheetNames : null;
+        const sheetName = selectedSheet || workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        
+        if (!sheet) {
+          return res.status(400).json({ success: false, error: `Sheet "${sheetName}" not found` });
+        }
+        
+        rawRows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, raw: false, defval: '' });
+      } else {
+        const content = req.file.buffer.toString('utf-8');
+        const parsed = Papa.parse(content, { header: false, skipEmptyLines: false });
+        rawRows = parsed.data as string[][];
+      }
+
+      // Return first 20 rows for preview
+      const previewRows = rawRows.slice(0, 20);
+      const totalRows = rawRows.length;
+      const totalCols = rawRows.length > 0 ? Math.max(...rawRows.slice(0, 20).map(r => r.length)) : 0;
+
+      res.json({
+        success: true,
+        previewRows,
+        totalRows,
+        totalCols,
+        sheets,
+        fileName: req.file.originalname,
+      });
+    } catch (error) {
+      console.error('Preview error:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to preview file'
+      });
+    }
+  });
+
+  // Analyze with header row selection
+  app.post('/api/analyze-with-header', upload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ success: false, error: 'No file uploaded' });
+      }
+
+      const ext = req.file.originalname.toLowerCase().slice(req.file.originalname.lastIndexOf('.'));
+      const selectedSheet = req.body?.sheet as string | undefined;
+      const headerRowIndex = parseInt(req.body?.headerRow || '0', 10);
+      
+      let rawRows: string[][] = [];
+
+      if (ext === '.xlsx' || ext === '.xls') {
+        const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+        const sheetName = selectedSheet || workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        
+        if (!sheet) {
+          return res.status(400).json({ success: false, error: `Sheet "${sheetName}" not found` });
+        }
+        
+        rawRows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, raw: false, defval: '' });
+      } else {
+        const content = req.file.buffer.toString('utf-8');
+        const parsed = Papa.parse(content, { header: false, skipEmptyLines: false });
+        rawRows = parsed.data as string[][];
+      }
+
+      if (rawRows.length <= headerRowIndex) {
+        return res.status(400).json({ success: false, error: 'Header row index is out of range' });
+      }
+
+      // Extract headers and data rows based on selected header row
+      const headerRow = rawRows[headerRowIndex];
+      const dataRows = rawRows.slice(headerRowIndex + 1);
+
+      // Generate unique header names
+      const usedNames = new Set<string>();
+      const headers = headerRow.map((h, i) => {
+        let name = (h || '').toString().trim() || `Column${i + 1}`;
+        let originalName = name;
+        let counter = 2;
+        while (usedNames.has(name)) {
+          name = `${originalName}_${counter}`;
+          counter++;
+        }
+        usedNames.add(name);
+        return name;
+      });
+
+      // Convert data rows to record objects
+      const rows = dataRows
+        .filter(row => row.some(cell => cell && cell.toString().trim() !== ''))
+        .map(row => {
+          const record: Record<string, string> = {};
+          headers.forEach((header, i) => {
+            record[header] = (row[i] || '').toString().trim();
+          });
+          return record;
+        });
+
+      if (headers.length === 0 || rows.length === 0) {
+        return res.status(400).json({ success: false, error: 'No valid data found' });
+      }
+
+      const result = analyzeData(
+        { headers, rows },
+        req.file.originalname
+      );
+
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error('Analysis error:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'An unexpected error occurred'
+      });
+    }
+  });
+
+  // Pivot/unpivot data transformation
+  app.post('/api/pivot', async (req, res) => {
+    try {
+      const { rawData, fileName, idColumns, valueColumns, pivotType } = req.body;
+      
+      if (!rawData || !Array.isArray(rawData) || rawData.length === 0) {
+        return res.status(400).json({ success: false, error: 'No data provided' });
+      }
+
+      if (!idColumns || !Array.isArray(idColumns) || idColumns.length === 0) {
+        return res.status(400).json({ success: false, error: 'At least one identifier column is required' });
+      }
+
+      if (!valueColumns || !Array.isArray(valueColumns) || valueColumns.length === 0) {
+        return res.status(400).json({ success: false, error: 'At least one value column is required' });
+      }
+
+      // Unpivot: convert wide format to long format
+      // Each value column becomes a row with Period (column name) and Value
+      const unpivotedRows: Record<string, string>[] = [];
+      
+      for (const row of rawData) {
+        for (const valueCol of valueColumns) {
+          const value = row[valueCol];
+          // Skip empty values
+          if (value === '' || value === null || value === undefined) continue;
+          
+          const newRow: Record<string, string> = {};
+          // Add ID columns
+          for (const idCol of idColumns) {
+            newRow[idCol] = row[idCol] || '';
+          }
+          // Add Period and Value
+          newRow['Period'] = valueCol;
+          newRow['Value'] = String(value);
+          unpivotedRows.push(newRow);
+        }
+      }
+
+      if (unpivotedRows.length === 0) {
+        return res.status(400).json({ success: false, error: 'No data after reshaping. Check that value columns have data.' });
+      }
+
+      const headers = [...idColumns, 'Period', 'Value'];
+      
+      const result = analyzeData(
+        { headers, rows: unpivotedRows },
+        fileName || 'reshaped_data.csv'
+      );
+
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error('Pivot error:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to reshape data'
+      });
+    }
+  });
+
   app.post('/api/sheets', upload.single('file'), async (req, res) => {
     try {
       if (!req.file) {
@@ -386,6 +578,68 @@ Sitemap: https://csvviz.com/sitemap.xml
       res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Failed to reanalyze data'
+      });
+    }
+  });
+
+  // Pivot/unpivot endpoint - converts wide format data to long format
+  app.post('/api/pivot', async (req, res) => {
+    try {
+      const { rawData, fileName, idColumns, valueColumns } = req.body;
+      
+      if (!rawData || !Array.isArray(rawData) || rawData.length === 0) {
+        return res.status(400).json({ success: false, error: 'No data provided' });
+      }
+      
+      if (!idColumns || !Array.isArray(idColumns) || idColumns.length === 0) {
+        return res.status(400).json({ success: false, error: 'No identifier columns selected' });
+      }
+      
+      if (!valueColumns || !Array.isArray(valueColumns) || valueColumns.length === 0) {
+        return res.status(400).json({ success: false, error: 'No value columns selected' });
+      }
+
+      // Transform wide format to long format (unpivot)
+      const pivotedRows: Record<string, string>[] = [];
+      
+      for (const row of rawData) {
+        // For each value column, create a new row with Period and Value
+        for (const valueCol of valueColumns) {
+          const newRow: Record<string, string> = {};
+          
+          // Copy identifier columns
+          for (const idCol of idColumns) {
+            newRow[idCol] = row[idCol] ?? '';
+          }
+          
+          // Add Period (the column name) and Value (the cell value)
+          newRow['Period'] = valueCol;
+          newRow['Value'] = row[valueCol] ?? '';
+          
+          // Only include rows with non-empty values
+          if (newRow['Value'] !== '' && newRow['Value'] !== null && newRow['Value'] !== undefined) {
+            pivotedRows.push(newRow);
+          }
+        }
+      }
+
+      if (pivotedRows.length === 0) {
+        return res.status(400).json({ success: false, error: 'No data after reshaping' });
+      }
+
+      const headers = [...idColumns, 'Period', 'Value'];
+      
+      const result = analyzeData(
+        { headers, rows: pivotedRows },
+        `${fileName?.replace(/\.[^/.]+$/, '') || 'data'}_reshaped.csv`
+      );
+
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error('Pivot error:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to reshape data'
       });
     }
   });

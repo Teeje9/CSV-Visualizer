@@ -844,6 +844,10 @@ function generateSmartCharts(columns: ColumnInfo[], rows: Record<string, string>
   const currencyCols = numericCols.filter(c => c.semanticType === 'currency');
   const countCols = numericCols.filter(c => c.semanticType === 'count');
   const percentCols = numericCols.filter(c => c.semanticType === 'percentage');
+  
+  // Detect Period column (from pivot operations) and treat it as a pseudo-temporal column
+  const periodCol = columns.find(c => c.name === 'Period');
+  const valueCol = columns.find(c => c.name === 'Value' && c.baseType === 'numeric');
 
   for (const timeCol of temporalCols) {
     const priorityNumerics = [...currencyCols, ...countCols, ...percentCols];
@@ -872,6 +876,82 @@ function generateSmartCharts(columns: ColumnInfo[], rows: Record<string, string>
           data,
           priority,
           reason: 'time_series'
+        });
+      }
+    }
+  }
+
+  // Handle pivoted data with Period and Value columns (time series from reshape)
+  if (periodCol && valueCol) {
+    // Find categorical columns that can be used for grouping (e.g., Company, Contact)
+    const groupCols = columns.filter(c => 
+      c.baseType === 'categorical' && 
+      c.name !== 'Period' && 
+      c.cardinality > 1 &&
+      c.cardinality <= 50
+    );
+
+    // Create a time series line chart showing Value over Period
+    const periodData: Record<string, number[]> = {};
+    for (const row of rows) {
+      const period = row['Period'] || '';
+      const value = cleanNumericValue(row['Value'] || '0');
+      if (!isNaN(value) && period) {
+        if (!periodData[period]) periodData[period] = [];
+        periodData[period].push(value);
+      }
+    }
+
+    // Aggregate by period (sum values for each period)
+    const aggregatedPeriodData = Object.entries(periodData)
+      .map(([period, values]) => ({
+        Period: period,
+        Value: ss.sum(values)
+      }));
+
+    if (aggregatedPeriodData.length > 2) {
+      candidates.push({
+        type: 'line',
+        title: 'Value Over Periods',
+        xAxis: 'Period',
+        yAxis: 'Value',
+        data: aggregatedPeriodData,
+        priority: 95,
+        reason: 'time_series'
+      });
+    }
+
+    // If we have a grouping column, create a grouped bar chart
+    if (groupCols.length > 0) {
+      const groupCol = groupCols[0];
+      const groupedData: Record<string, number[]> = {};
+      
+      for (const row of rows) {
+        const group = row[groupCol.name] || 'Unknown';
+        const value = cleanNumericValue(row['Value'] || '0');
+        if (!isNaN(value)) {
+          if (!groupedData[group]) groupedData[group] = [];
+          groupedData[group].push(value);
+        }
+      }
+
+      const barData = Object.entries(groupedData)
+        .map(([group, values]) => ({
+          [groupCol.name]: group,
+          Value: ss.sum(values)
+        }))
+        .sort((a, b) => b.Value - a.Value)
+        .slice(0, 15);
+
+      if (barData.length > 1) {
+        candidates.push({
+          type: 'bar',
+          title: `Total Value by ${groupCol.name}`,
+          xAxis: groupCol.name,
+          yAxis: 'Value',
+          data: barData,
+          priority: 90,
+          reason: 'category_breakdown'
         });
       }
     }

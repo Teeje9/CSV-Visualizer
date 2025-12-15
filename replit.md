@@ -150,3 +150,18 @@ Preferred communication style: Simple, everyday language.
   - `UpgradePrompt`: Displays upgrade CTAs (only when paywall enabled)
   - Pricing page at `/pricing` (placeholder for future Stripe integration)
 - **PDF Export**: Conditional watermark based on tier/beta status
+
+### Complex Excel Support (December 2025)
+- **Header Row Selector**: For Excel files, users can select which row contains column headers
+  - `/api/preview` endpoint returns first 20 raw rows for selection
+  - `HeaderRowSelector` component shows raw data grid for header row picking
+  - Flow: Upload → Header Select (if Excel) → Data Prep → Results
+- **Pivot/Reshape Feature**: Convert wide format data to long format
+  - Appears in DataPrepPanel when file has 10+ columns
+  - Users select identifier columns (stay as-is) and value columns (become rows)
+  - Creates "Period" and "Value" columns from selected columns
+  - `/api/pivot` endpoint performs the transformation
+- **Time Series Detection**: Enhanced chart generation for pivoted data
+  - Detects "Period" and "Value" columns from reshape operations
+  - Generates line charts showing trends over periods
+  - Creates grouped bar charts by identifier columns

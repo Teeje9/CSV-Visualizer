@@ -6,6 +6,7 @@ import { Header } from "@/components/header";
 import { PdfExport } from "@/components/pdf-export";
 import { MetaTags } from "@/components/meta-tags";
 import { DataPrepPanel, type DataPrepState } from "@/components/data-prep-panel";
+import { HeaderRowSelector } from "@/components/header-row-selector";
 import { getVariant, type LandingVariant } from "@/lib/seo-config";
 import { sampleDatasets } from "@/lib/sample-data";
 import { Button } from "@/components/ui/button";
@@ -19,17 +20,27 @@ interface HomeProps {
 
 const featureIcons = [BarChart3, Sparkles, Calculator, FileDown];
 
-type AppStage = "upload" | "prep" | "results";
+type AppStage = "upload" | "header-select" | "prep" | "results";
 
 interface PrepData {
   result: AnalysisResult;
   duplicateCount: number;
 }
 
+interface HeaderSelectData {
+  previewRows: string[][];
+  totalRows: number;
+  totalCols: number;
+  fileName: string;
+  sheets: string[] | null;
+  file: File;
+}
+
 export default function Home({ variantSlug = "default" }: HomeProps) {
   const [stage, setStage] = useState<AppStage>("upload");
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [prepData, setPrepData] = useState<PrepData | null>(null);
+  const [headerSelectData, setHeaderSelectData] = useState<HeaderSelectData | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [loadingSampleId, setLoadingSampleId] = useState<string | null>(null);
   const [showBetaBanner, setShowBetaBanner] = useState(true);
@@ -113,12 +124,104 @@ export default function Home({ variantSlug = "default" }: HomeProps) {
     }
   };
 
+  const handlePivot = async (idColumns: string[], valueColumns: string[]) => {
+    if (!prepData) return;
+    
+    setIsAnalyzing(true);
+    
+    try {
+      const response = await fetch('/api/pivot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rawData: prepData.result.rawData,
+          fileName: prepData.result.fileName,
+          idColumns,
+          valueColumns,
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (response.ok && result.success) {
+        setAnalysisResult(result.data);
+        setStage("results");
+      } else {
+        toast({
+          title: "Reshape Error",
+          description: result.error || "Failed to reshape data",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to reshape data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleNewUpload = () => {
     setAnalysisResult(null);
     setPrepData(null);
+    setHeaderSelectData(null);
     setStage("upload");
     setIsAnalyzing(false);
     setLoadingSampleId(null);
+  };
+
+  const handleHeaderSelectRequired = (data: HeaderSelectData) => {
+    setIsAnalyzing(false);
+    setHeaderSelectData(data);
+    setStage("header-select");
+  };
+
+  const handleHeaderConfirm = async (headerRowIndex: number, selectedSheet?: string) => {
+    if (!headerSelectData) return;
+    
+    setIsAnalyzing(true);
+    
+    const formData = new FormData();
+    formData.append('file', headerSelectData.file);
+    formData.append('headerRow', String(headerRowIndex));
+    if (selectedSheet) {
+      formData.append('sheet', selectedSheet);
+    }
+
+    try {
+      const response = await fetch('/api/analyze-with-header', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+      
+      if (response.ok && result.success) {
+        handleAnalysisComplete(result.data);
+      } else {
+        toast({
+          title: "Analysis Error",
+          description: result.error || "Failed to analyze file",
+          variant: "destructive",
+        });
+        setIsAnalyzing(false);
+      }
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to analyze file",
+        variant: "destructive",
+      });
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleHeaderCancel = () => {
+    setHeaderSelectData(null);
+    setStage("upload");
   };
 
   const handleUploadStart = () => {
@@ -158,6 +261,32 @@ export default function Home({ variantSlug = "default" }: HomeProps) {
     }
   };
 
+  if (stage === "header-select" && headerSelectData) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <MetaTags variant={variant} />
+        <Header 
+          onNewUpload={handleNewUpload} 
+          showNewUpload={true} 
+          fileName={headerSelectData.fileName}
+        />
+        <main className="flex-1 overflow-y-auto">
+          <HeaderRowSelector
+            previewRows={headerSelectData.previewRows}
+            totalRows={headerSelectData.totalRows}
+            totalCols={headerSelectData.totalCols}
+            fileName={headerSelectData.fileName}
+            sheets={headerSelectData.sheets}
+            file={headerSelectData.file}
+            onConfirm={handleHeaderConfirm}
+            onCancel={handleHeaderCancel}
+            isLoading={isAnalyzing}
+          />
+        </main>
+      </div>
+    );
+  }
+
   if (stage === "prep" && prepData) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
@@ -179,7 +308,9 @@ export default function Home({ variantSlug = "default" }: HomeProps) {
               rawData={prepData.result.rawData || []}
               duplicateCount={prepData.duplicateCount}
               onApplyTransforms={handleApplyTransforms}
+              onPivot={handlePivot}
               onSkip={handleSkipPrep}
+              isPivoting={isAnalyzing}
             />
           )}
         </main>
@@ -219,6 +350,7 @@ export default function Home({ variantSlug = "default" }: HomeProps) {
             <UploadZone 
               onAnalysisComplete={handleAnalysisComplete} 
               onUploadStart={handleUploadStart}
+              onHeaderSelectRequired={handleHeaderSelectRequired}
               isAnalyzing={isAnalyzing}
             />
 

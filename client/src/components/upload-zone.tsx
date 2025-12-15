@@ -7,9 +7,19 @@ import type { AnalysisResult } from "@shared/schema";
 import { TIER_CONFIG, BETA_INFO } from "@shared/tier-config";
 import { checkFileSize, isBetaMode, formatBytes } from "@shared/tier-utils";
 
+interface HeaderSelectData {
+  previewRows: string[][];
+  totalRows: number;
+  totalCols: number;
+  fileName: string;
+  sheets: string[] | null;
+  file: File;
+}
+
 interface UploadZoneProps {
   onAnalysisComplete: (result: AnalysisResult) => void;
   onUploadStart: () => void;
+  onHeaderSelectRequired?: (data: HeaderSelectData) => void;
   isAnalyzing: boolean;
 }
 
@@ -19,7 +29,7 @@ interface SheetSelection {
   file: File;
 }
 
-export function UploadZone({ onAnalysisComplete, onUploadStart, isAnalyzing }: UploadZoneProps) {
+export function UploadZone({ onAnalysisComplete, onUploadStart, onHeaderSelectRequired, isAnalyzing }: UploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sheetSelection, setSheetSelection] = useState<SheetSelection | null>(null);
@@ -91,7 +101,44 @@ export function UploadZone({ onAnalysisComplete, onUploadStart, isAnalyzing }: U
 
     const isExcel = extension === '.xlsx' || extension === '.xls';
     
-    if (isExcel) {
+    // For Excel files, use preview to detect if header row selection is needed
+    if (isExcel && onHeaderSelectRequired) {
+      onUploadStart();
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const response = await fetch('/api/preview', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const result = await response.json();
+        
+        if (result.success) {
+          // Check if file looks complex (many columns, potential multi-row headers)
+          const hasMultipleSheets = result.sheets && result.sheets.length > 1;
+          const hasManyCols = result.totalCols > 20;
+          const firstRowMostlyEmpty = result.previewRows[0]?.filter((c: string) => c && c.trim()).length <= 3;
+          
+          // If complex structure detected, let user select header row
+          if (hasMultipleSheets || hasManyCols || firstRowMostlyEmpty) {
+            onHeaderSelectRequired({
+              previewRows: result.previewRows,
+              totalRows: result.totalRows,
+              totalCols: result.totalCols,
+              fileName: result.fileName,
+              sheets: result.sheets,
+              file: file,
+            });
+            return;
+          }
+        }
+      } catch (err) {
+        // Fall through to normal analysis
+      }
+    } else if (isExcel) {
+      // Legacy path for when onHeaderSelectRequired is not provided
       const formData = new FormData();
       formData.append('file', file);
 
@@ -117,7 +164,7 @@ export function UploadZone({ onAnalysisComplete, onUploadStart, isAnalyzing }: U
     }
 
     analyzeWithSheet(file);
-  }, [analyzeWithSheet]);
+  }, [analyzeWithSheet, onHeaderSelectRequired, onUploadStart]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
