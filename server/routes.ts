@@ -4,6 +4,7 @@ import multer from "multer";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { analyzeData } from "./analysis";
+import { sendFeedbackEmail } from "./resend";
 import type { UploadResponse, AnalysisResult } from "@shared/schema";
 import OpenAI from "openai";
 
@@ -455,6 +456,39 @@ Guidelines:
       res.status(500).json({ 
         success: false, 
         error: error instanceof Error ? error.message : 'Failed to generate summary' 
+      });
+    }
+  });
+
+  // Feedback endpoint - sends email via Resend
+  app.post('/api/feedback', async (req, res) => {
+    try {
+      const { name, email, message } = req.body;
+      
+      if (!name || !email || !message) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Name, email, and message are required' 
+        });
+      }
+      
+      // Basic email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Please provide a valid email address' 
+        });
+      }
+      
+      await sendFeedbackEmail(name, email, message);
+      
+      res.json({ success: true, message: 'Feedback sent successfully' });
+    } catch (error) {
+      console.error('Feedback email error:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to send feedback. Please try again later.' 
       });
     }
   });

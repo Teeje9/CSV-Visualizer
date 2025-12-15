@@ -141,7 +141,7 @@ export default function Pricing() {
           </div>
 
           <div className="mt-16 pt-8 border-t border-border text-center text-sm text-muted-foreground">
-            <p>Questions? Reach out to us at support@csvviz.com</p>
+            <p>Questions? <Link href="/feedback" className="text-primary hover:underline">Send us feedback</Link></p>
           </div>
         </div>
       </main>

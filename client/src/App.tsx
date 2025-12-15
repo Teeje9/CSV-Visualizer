@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Pricing from "@/pages/pricing";
+import Feedback from "@/pages/feedback";
 
 function Router() {
   return (
@@ -15,6 +16,7 @@ function Router() {
       <Route path="/excel-analysis" component={() => <Home variantSlug="excel-analysis" />} />
       <Route path="/sales-dashboard" component={() => <Home variantSlug="sales-dashboard" />} />
       <Route path="/pricing" component={Pricing} />
+      <Route path="/feedback" component={Feedback} />
       <Route component={NotFound} />
     </Switch>
   );
