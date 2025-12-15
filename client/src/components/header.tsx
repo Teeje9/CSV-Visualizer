@@ -1,5 +1,6 @@
 import { BarChart3, Upload, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 interface HeaderProps {
   onNewUpload: () => void;
@@ -17,6 +18,9 @@ export function Header({ onNewUpload, showNewUpload, fileName, exportButton }: H
             <BarChart3 className="w-5 h-5 text-primary-foreground" />
           </div>
           <span className="font-semibold text-lg hidden sm:inline">CSVVIZ</span>
+          <Badge variant="secondary" className="text-xs font-medium" data-testid="badge-beta">
+            BETA
+          </Badge>
         </div>
       </div>
 

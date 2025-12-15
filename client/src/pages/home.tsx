@@ -11,7 +11,7 @@ import { sampleDatasets } from "@/lib/sample-data";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import type { AnalysisResult } from "@shared/schema";
-import { BarChart3, Sparkles, Calculator, FileDown, FileSpreadsheet, Loader2 } from "lucide-react";
+import { BarChart3, Sparkles, Calculator, FileDown, FileSpreadsheet, Loader2, X, Rocket } from "lucide-react";
 
 interface HomeProps {
   variantSlug?: string;
@@ -32,6 +32,7 @@ export default function Home({ variantSlug = "default" }: HomeProps) {
   const [prepData, setPrepData] = useState<PrepData | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [loadingSampleId, setLoadingSampleId] = useState<string | null>(null);
+  const [showBetaBanner, setShowBetaBanner] = useState(true);
   const chartsContainerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   
@@ -192,6 +193,18 @@ export default function Home({ variantSlug = "default" }: HomeProps) {
         <MetaTags variant={variant} />
         <Header onNewUpload={handleNewUpload} showNewUpload={false} />
         
+        {showBetaBanner && (
+          <div className="bg-primary/10 border-b border-primary/20 px-4 py-2.5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-sm flex-wrap">
+              <Rocket className="w-4 h-4 text-primary shrink-0" />
+              <span><strong>CSVVIZ Beta</strong> - Free during beta! Basic features will always be free. Some advanced features will be premium later.</span>
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => setShowBetaBanner(false)} className="shrink-0" data-testid="button-dismiss-banner">
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
+        
         <main className="flex-1 flex flex-col">
           <section className="flex-shrink-0 flex flex-col items-center justify-center p-4 md:p-8 pt-8 md:pt-16">
             <div className="text-center mb-6 md:mb-8 max-w-2xl">
@@ -280,7 +293,8 @@ export default function Home({ variantSlug = "default" }: HomeProps) {
           </section>
 
           <footer className="py-6 px-4 text-center text-sm text-muted-foreground border-t border-border">
-            <p>Free to use. No signup required. Your data stays private.</p>
+            <p className="mb-1"><strong>CSVVIZ Beta</strong> - Free during beta. Basic features will always be free.</p>
+            <p>No signup required. Your data stays private.</p>
           </footer>
         </main>
       </div>
