@@ -1,8 +1,11 @@
 import { useCallback, useState, useRef } from "react";
-import { Upload, FileSpreadsheet, Loader2, AlertCircle } from "lucide-react";
+import { Upload, FileSpreadsheet, Loader2, AlertCircle, Crown } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import type { AnalysisResult } from "@shared/schema";
+import { TIER_CONFIG, BETA_INFO } from "@shared/tier-config";
+import { checkFileSize, isBetaMode, formatBytes } from "@shared/tier-utils";
 
 interface UploadZoneProps {
   onAnalysisComplete: (result: AnalysisResult) => void;
@@ -71,8 +74,17 @@ export function UploadZone({ onAnalysisComplete, onUploadStart, isAnalyzing }: U
       return;
     }
 
-    const maxSize = 5 * 1024 * 1024;
-    if (file.size > maxSize) {
+    // Check file size - during beta (PAYWALL_ENABLED=false), all sizes pass
+    // When paywall is enabled, this will enforce tier limits
+    const sizeCheck = checkFileSize(file.size);
+    if (!sizeCheck.allowed) {
+      setError(sizeCheck.message || "File size exceeds your plan limit");
+      return;
+    }
+    
+    // Fallback hard limit for server protection (5MB current backend limit)
+    const serverMaxSize = 5 * 1024 * 1024;
+    if (file.size > serverMaxSize) {
       setError("File size must be less than 5MB");
       return;
     }
@@ -210,6 +222,12 @@ export function UploadZone({ onAnalysisComplete, onUploadStart, isAnalyzing }: U
                 <p className="text-sm text-muted-foreground">
                   Supports CSV, TSV, and Excel files up to 5MB
                 </p>
+                {isBetaMode() && (
+                  <p className="text-xs text-muted-foreground/70 mt-1 flex items-center justify-center gap-1">
+                    <Crown className="w-3 h-3 text-amber-500" />
+                    <span>Pro: up to {formatBytes(TIER_CONFIG.pro.limits.maxFileSize)}</span>
+                  </p>
+                )}
               </div>
             </>
           )}
@@ -253,12 +271,21 @@ export function UploadZone({ onAnalysisComplete, onUploadStart, isAnalyzing }: U
 
       <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
         {[
-          { label: 'Auto Charts', desc: 'Smart visualization' },
-          { label: 'Statistics', desc: 'Mean, median & more' },
-          { label: 'Trends', desc: 'Pattern detection' },
-          { label: 'Correlations', desc: 'Find relationships' },
+          { label: 'Auto Charts', desc: 'Smart visualization', pro: false },
+          { label: 'Statistics', desc: 'Mean, median & more', pro: false },
+          { label: 'Trends', desc: 'Pattern detection', pro: false },
+          { label: 'Correlations', desc: 'Find relationships', pro: true },
         ].map((item) => (
-          <div key={item.label} className="p-3 rounded-lg bg-card border border-border">
+          <div key={item.label} className="p-3 rounded-lg bg-card border border-border relative">
+            {item.pro && (
+              <Badge 
+                variant="secondary" 
+                className="absolute -top-2 -right-2 text-[9px] px-1 py-0 flex items-center gap-0.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30"
+              >
+                <Crown className="w-2.5 h-2.5" />
+                Pro
+              </Badge>
+            )}
             <p className="font-medium text-sm">{item.label}</p>
             <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
           </div>

@@ -9,7 +9,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, X, TrendingUp, BarChart2, Circle, PieChart } from "lucide-react";
+import { Plus, X, TrendingUp, BarChart2, Circle, PieChart, Crown } from "lucide-react";
+import { isProChartType, isChartTypeAllowed, isPaywallEnabled } from "@shared/tier-utils";
+import { useToast } from "@/hooks/use-toast";
 import type { AnalysisResult, ChartConfig, ColumnInfo } from "@shared/schema";
 
 interface ExtendedChartConfig extends ChartConfig {
@@ -71,7 +73,12 @@ function suggestChartType(xColumn: ColumnInfo | undefined, yColumns: ColumnInfo[
   }
   
   if (xColumn.baseType === "numeric" && yColumns.length === 1 && yColumns[0].baseType === "numeric") {
-    return "scatter";
+    // Scatter is a Pro chart type - only suggest it if allowed
+    if (isChartTypeAllowed("scatter")) {
+      return "scatter";
+    }
+    // Fall back to line chart as alternative for numeric x numeric
+    return "line";
   }
   
   if (xColumn.baseType === "categorical" || xColumn.semanticType === "category") {
@@ -146,6 +153,7 @@ function aggregateData(
 }
 
 export function ChartBuilder({ result, onAddChart }: ChartBuilderProps) {
+  const { toast } = useToast();
   const [xAxis, setXAxis] = useState<string>("");
   const [yAxes, setYAxes] = useState<string[]>([]);
   const [chartType, setChartType] = useState<ChartType>("bar");
@@ -212,6 +220,18 @@ export function ChartBuilder({ result, onAddChart }: ChartBuilderProps) {
 
   const handleAddChart = () => {
     if (!xAxis || yAxes.length === 0 || !result.rawData) return;
+    
+    // Guard: Block Pro chart types when paywall is enabled and user doesn't have access
+    if (!isChartTypeAllowed(chartType)) {
+      toast({
+        title: "Upgrade Required",
+        description: `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} charts are a Pro feature. Upgrade to access advanced charts.`,
+        variant: "destructive",
+      });
+      // Reset to an allowed chart type
+      setChartType("bar");
+      return;
+    }
 
     const chartData = aggregateData(result.rawData, xAxis, yAxes, aggregation);
 
@@ -303,14 +323,30 @@ export function ChartBuilder({ result, onAddChart }: ChartBuilderProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {CHART_TYPE_OPTIONS.map(opt => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  <div className="flex items-center gap-2">
-                    {opt.icon}
-                    <span>{opt.label}</span>
-                  </div>
-                </SelectItem>
-              ))}
+              {CHART_TYPE_OPTIONS.map(opt => {
+                const isPro = isProChartType(opt.value);
+                const isAllowed = isChartTypeAllowed(opt.value);
+                const isLocked = isPro && !isAllowed && isPaywallEnabled();
+                return (
+                  <SelectItem 
+                    key={opt.value} 
+                    value={opt.value}
+                    disabled={isLocked}
+                    className={isLocked ? 'opacity-50' : ''}
+                  >
+                    <div className="flex items-center gap-2">
+                      {opt.icon}
+                      <span>{opt.label}</span>
+                      {isPro && (
+                        <Badge variant="secondary" className="text-[9px] px-1 py-0 flex items-center gap-0.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30 ml-1">
+                          <Crown className="w-2.5 h-2.5" />
+                          {isLocked ? 'Locked' : 'Pro'}
+                        </Badge>
+                      )}
+                    </div>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>

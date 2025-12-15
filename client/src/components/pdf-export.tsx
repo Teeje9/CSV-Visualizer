@@ -4,6 +4,7 @@ import { Download, Loader2 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import type { AnalysisResult } from "@shared/schema";
+import { shouldShowWatermark, isBetaMode } from "@shared/tier-utils";
 
 interface PdfExportProps {
   result: AnalysisResult;
@@ -421,27 +422,32 @@ export function PdfExport({ result, chartsContainerRef }: PdfExportProps) {
       }
 
       const totalPages = pdf.getNumberOfPages();
+      const showWatermark = shouldShowWatermark();
+      const inBeta = isBetaMode();
+      
       for (let i = 1; i <= totalPages; i++) {
         pdf.setPage(i);
         
-        // Add diagonal watermark pattern across the entire page
-        pdf.saveGraphicsState();
-        pdf.setGState((pdf as any).GState({ opacity: 0.08 }));
-        pdf.setTextColor(100, 100, 100);
-        pdf.setFontSize(28);
-        pdf.setFont('helvetica', 'bold');
-        
-        const watermarkText = 'CSVVIZ BETA';
-        for (let row = -2; row < 12; row++) {
-          for (let col = -1; col < 4; col++) {
-            const x = col * 80 + (row % 2) * 40;
-            const y = row * 35 + 20;
-            pdf.text(watermarkText, x, y, { angle: -35 });
+        // Add diagonal watermark pattern across the entire page (for free tier or beta)
+        if (showWatermark) {
+          pdf.saveGraphicsState();
+          pdf.setGState((pdf as any).GState({ opacity: 0.08 }));
+          pdf.setTextColor(100, 100, 100);
+          pdf.setFontSize(28);
+          pdf.setFont('helvetica', 'bold');
+          
+          const watermarkText = inBeta ? 'CSVVIZ BETA' : 'CSVVIZ FREE';
+          for (let row = -2; row < 12; row++) {
+            for (let col = -1; col < 4; col++) {
+              const x = col * 80 + (row % 2) * 40;
+              const y = row * 35 + 20;
+              pdf.text(watermarkText, x, y, { angle: -35 });
+            }
           }
+          pdf.restoreGraphicsState();
         }
-        pdf.restoreGraphicsState();
         
-        // Footer with upgrade CTA
+        // Footer
         pdf.setFillColor(...colors.bg);
         pdf.rect(0, pageHeight - 16, pageWidth, 16, 'F');
         pdf.setDrawColor(...colors.border);
@@ -451,11 +457,13 @@ export function PdfExport({ result, chartsContainerRef }: PdfExportProps) {
         pdf.setTextColor(...colors.textMuted);
         pdf.text(`Page ${i} of ${totalPages}`, margin, pageHeight - 6);
         
-        // Beta watermark notice in center
-        pdf.setTextColor(...colors.warning);
-        pdf.setFont('helvetica', 'bold');
-        const betaNotice = 'BETA - Upgrade to remove watermark';
-        pdf.text(betaNotice, (pageWidth - pdf.getTextWidth(betaNotice)) / 2, pageHeight - 6);
+        // Show upgrade CTA only if watermark is shown
+        if (showWatermark) {
+          pdf.setTextColor(...colors.warning);
+          pdf.setFont('helvetica', 'bold');
+          const betaNotice = inBeta ? 'BETA - Upgrade to remove watermark' : 'FREE - Upgrade to Pro to remove watermark';
+          pdf.text(betaNotice, (pageWidth - pdf.getTextWidth(betaNotice)) / 2, pageHeight - 6);
+        }
         
         pdf.setTextColor(...colors.primary);
         const footerText = 'csvviz.com';

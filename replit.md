@@ -123,3 +123,30 @@ Preferred communication style: Simple, everyday language.
 
 ### Fonts
 - Google Fonts: Inter, JetBrains Mono, DM Sans, Fira Code, Geist Mono
+
+### Tier System & Paywall (December 2025)
+- **Configuration**: `shared/tier-config.ts` defines Free, Pro, Enterprise tiers
+- **Master Flag**: `PAYWALL_ENABLED` (currently `false` for beta)
+  - When `false`: All features unlocked, but Pro badges shown as preview
+  - When `true`: Feature gating enforced based on user tier
+- **Tier Utilities**: `shared/tier-utils.ts` provides functions for:
+  - `hasFeature(feature)`: Check if current user can access feature
+  - `isProChartType(type)`: Check if chart type is Pro-only
+  - `shouldShowWatermark()`: Check if PDF exports need watermark
+  - `checkFileSize(size)`: Validate against tier limits
+  - `isBetaMode()`: Check if paywall is disabled
+- **Free Tier Limits** (defined but not enforced during beta):
+  - 1MB file size, 5000 rows
+  - Basic charts: bar, line, pie
+  - Basic stats: count, min, max, mean
+  - Exports with watermark
+- **Pro Tier Features**:
+  - 100MB file size, 100k rows
+  - Advanced charts: scatter, histogram, box plots
+  - Advanced stats: correlations, outlier detection
+  - Multi-chart dashboards, saved projects, watermark-free exports
+- **UI Components**:
+  - `ProBadge`: Shows "PRO" badge on premium features
+  - `UpgradePrompt`: Displays upgrade CTAs (only when paywall enabled)
+  - Pricing page at `/pricing` (placeholder for future Stripe integration)
+- **PDF Export**: Conditional watermark based on tier/beta status

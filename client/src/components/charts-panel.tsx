@@ -43,7 +43,8 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { BarChart3, TrendingUp, Circle, BarChart2, Download, X, Settings, AreaChartIcon, PieChartIcon, Sparkles } from "lucide-react";
+import { BarChart3, TrendingUp, Circle, BarChart2, Download, X, Settings, AreaChartIcon, PieChartIcon, Sparkles, Crown } from "lucide-react";
+import { isProChartType, isChartTypeAllowed, isPaywallEnabled } from "@shared/tier-utils";
 import { ChartBuilder } from "./chart-builder";
 import type { ChartConfig, AnalysisResult } from "@shared/schema";
 
@@ -188,6 +189,8 @@ const ALL_CHART_TYPES: ChartTypeInfo[] = [
   { type: 'histogram', label: 'Histogram', description: 'Shows distribution of values' },
 ];
 
+const PRO_CHART_TYPES = ['scatter', 'histogram', 'boxplot', 'correlation'] as const;
+
 function getSuggestedTypes(originalType: ChartType, hasTimeData: boolean, hasCategoryData: boolean): ChartType[] {
   const suggested: ChartType[] = [originalType];
   
@@ -223,14 +226,14 @@ function ChartEditor({
 }) {
   const currentType = settings.chartType || originalType;
   
-  const hasTimeData = originalType === 'line' || (chartData && xAxisKey && 
+  const hasTimeData = originalType === 'line' || !!(chartData && xAxisKey && 
     chartData.some(d => {
       const val = d[xAxisKey];
       return typeof val === 'string' && !isNaN(Date.parse(val));
     }));
   
   const hasCategoryData = originalType === 'bar' || originalType === 'pie' || 
-    Boolean(chartData && xAxisKey && chartData.some(d => typeof d[xAxisKey] === 'string'));
+    !!(chartData && xAxisKey && chartData.some(d => typeof d[xAxisKey] === 'string'));
   
   const suggestedTypes = getSuggestedTypes(originalType, hasTimeData, hasCategoryData);
   
@@ -265,6 +268,9 @@ function ChartEditor({
             {ALL_CHART_TYPES.map((info) => {
               const isSuggested = suggestedTypes.includes(info.type);
               const isSelected = currentType === info.type;
+              const isProType = isProChartType(info.type);
+              const isAllowed = isChartTypeAllowed(info.type);
+              const isLocked = isProType && !isAllowed && isPaywallEnabled();
               
               return (
                 <button
@@ -273,15 +279,22 @@ function ChartEditor({
                     isSelected 
                       ? 'border-primary bg-primary/10' 
                       : 'border-transparent bg-muted/30'
-                  }`}
-                  onClick={() => onSettingsChange({ ...settings, chartType: info.type })}
+                  } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  onClick={() => !isLocked && onSettingsChange({ ...settings, chartType: info.type })}
+                  disabled={isLocked}
                   data-testid={`button-chart-type-${info.type}`}
                 >
                   <span className="text-muted-foreground">{getChartIcon(info.type)}</span>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-xs font-medium">{info.label}</span>
-                      {isSuggested && (
+                      {isProType && (
+                        <Badge variant="secondary" className="text-[9px] px-1 py-0 flex items-center gap-0.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30">
+                          <Crown className="w-2.5 h-2.5" />
+                          {isLocked ? 'Locked' : 'Pro'}
+                        </Badge>
+                      )}
+                      {isSuggested && !isProType && (
                         <Badge variant="secondary" className="text-[9px] px-1 py-0 flex items-center gap-0.5">
                           <Sparkles className="w-2.5 h-2.5" />
                           Suggested
@@ -768,7 +781,13 @@ function ChartCard({
   onSettingsChange: (settings: ChartCustomSettings) => void;
 }) {
   const chartRef = useRef<HTMLDivElement>(null);
-  const effectiveType = settings.chartType || config.type;
+  // Determine effective type: use settings override only if it's allowed
+  let effectiveType = settings.chartType || config.type;
+  // If the effective type is not allowed (Pro type when paywall enabled), use config.type
+  // which has already been downgraded by filterOrDowngradeChart
+  if (!isChartTypeAllowed(effectiveType)) {
+    effectiveType = config.type;
+  }
 
   const handleDownload = useCallback(async () => {
     if (!chartRef.current) return;
@@ -939,11 +958,30 @@ export function ChartsPanel({ result }: ChartsPanelProps) {
     return chartSettings[chartId] || { ...DEFAULT_SETTINGS };
   };
 
+  // Filter out Pro chart types when paywall is enabled (or downgrade to allowed type)
+  const filterOrDowngradeChart = (chart: ExtendedChartConfig): ExtendedChartConfig | null => {
+    if (isChartTypeAllowed(chart.type)) {
+      return chart;
+    }
+    // Downgrade scatter to line, histogram to bar
+    const downgrades: Record<string, string> = {
+      'scatter': 'line',
+      'histogram': 'bar',
+    };
+    const downgradeType = downgrades[chart.type];
+    if (downgradeType) {
+      return { ...chart, type: downgradeType as ChartConfig['type'] };
+    }
+    // If no downgrade available, filter it out
+    return null;
+  };
+
   const allCharts: ExtendedChartConfig[] = [
-    ...customCharts, 
+    ...customCharts.map(c => filterOrDowngradeChart(c)).filter(Boolean) as ExtendedChartConfig[], 
     ...result.charts
       .filter(c => !hiddenAutoCharts.has(c.id))
-      .map(c => ({ ...c, isCustom: false }))
+      .map(c => filterOrDowngradeChart({ ...c, isCustom: false }))
+      .filter(Boolean) as ExtendedChartConfig[]
   ];
 
   return (

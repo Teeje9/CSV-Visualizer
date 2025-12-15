@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
+import Pricing from "@/pages/pricing";
 
 function Router() {
   return (
@@ -13,6 +14,7 @@ function Router() {
       <Route path="/csv-charts" component={() => <Home variantSlug="csv-charts" />} />
       <Route path="/excel-analysis" component={() => <Home variantSlug="excel-analysis" />} />
       <Route path="/sales-dashboard" component={() => <Home variantSlug="sales-dashboard" />} />
+      <Route path="/pricing" component={Pricing} />
       <Route component={NotFound} />
     </Switch>
   );
