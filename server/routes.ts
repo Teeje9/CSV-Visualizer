@@ -697,7 +697,7 @@ Sitemap: https://csvviz.com/sitemap.xml
         Object.entries(row).slice(0, 6).map(([k, v]) => `${k}: ${v}`).join(', ')
       ).join('\n') || '';
 
-      const prompt = `You are a senior data analyst preparing an executive briefing. Provide a concise, professional analysis of this dataset in 2-3 paragraphs (max 150 words).
+      const prompt = `Summarize this dataset in plain, easy-to-understand language. Write 2-3 short paragraphs (max 120 words).
 
 Dataset: ${analysisResult.fileName} (${analysisResult.rowCount} rows, ${analysisResult.columnCount} columns)
 
@@ -712,13 +712,12 @@ Correlations: ${correlationsSummary}
 Sample Data: ${dataSample}
 
 Guidelines:
-- Use formal, business-appropriate language
-- Lead with the most significant finding and its business implication
-- Cite specific metrics, percentages, and statistical values
-- Highlight actionable insights and potential areas of concern
-- Avoid casual phrases, humor, or conversational tone
-- Focus on data-driven observations and measurable outcomes
-- Structure findings clearly with emphasis on key takeaways`;
+- Simply describe what the data shows - no business advice or recommendations
+- Mention the key numbers (averages, ranges, totals)
+- Point out any interesting patterns or correlations between columns
+- Note any trends over time if present
+- Keep it factual and straightforward
+- Use everyday language, not business jargon`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
