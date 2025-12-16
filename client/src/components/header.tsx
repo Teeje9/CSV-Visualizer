@@ -1,4 +1,4 @@
-import { BarChart3, Upload, FileText, Crown } from "lucide-react";
+import { BarChart3, Upload, FileText, Crown, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
@@ -45,6 +45,16 @@ export function Header({ onNewUpload, showNewUpload, fileName, exportButton }: H
             New Upload
           </Button>
         )}
+        <Link href="/feedback">
+          <Button 
+            variant="ghost" 
+            size="sm"
+            data-testid="button-feedback"
+          >
+            <MessageSquare className="w-4 h-4 mr-2" />
+            Feedback
+          </Button>
+        </Link>
         <Link href="/pricing">
           <Button 
             variant="outline" 
