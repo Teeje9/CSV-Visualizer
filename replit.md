@@ -94,6 +94,13 @@ Preferred communication style: Simple, everyday language.
 - Toggle options: Show Grid, Show Legend, Data Labels
 - Settings persist per chart during the session
 
+### Semantic Chart Formatting (December 2025)
+- Currency columns (Sales, Revenue, Price, etc.) display with $ prefix in axes and tooltips
+- Large numbers show compact formatting (e.g., $1.2M, 2.5K)
+- Domain padding ensures bars are always visible, even with similar values
+- Negative value ranges preserved for proper chart representation
+- Shared formatting utilities in `shared/format-utils.ts`
+
 ### Data Preparation (December 2025)
 - Three-stage flow: Upload -> Data Prep -> Results
 - DataPrepPanel shows after file upload for data cleaning
