@@ -200,7 +200,7 @@ export function getAvailableChartTypes(tier?: TierName): string[] {
  */
 export function shouldShowWatermark(tier?: TierName): boolean {
   if (!PAYWALL_ENABLED) {
-    return true; // During beta, always show watermark (it's promotional)
+    return false; // During beta, no watermark - all features unlocked
   }
   
   const userTier = tier || getCurrentTier();
