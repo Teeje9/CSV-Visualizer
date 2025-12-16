@@ -1303,7 +1303,7 @@ export function analyzeData(parsedData: ParsedData, fileName: string, uniqueColu
   // runStatisticalTests uses categorical columns, pass full list but it already filters internally
   const statisticalTests = runStatisticalTests(columns, rows);
 
-  const rawData = rows.slice(0, 50).map(row => {
+  const rawData = rows.map(row => {
     const cleanedRow: Record<string, string> = {};
     for (const col of columns) {
       const value = row[col.name] || '';
