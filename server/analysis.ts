@@ -801,6 +801,8 @@ interface ChartCandidate {
   data: Record<string, string | number>[];
   priority: number;
   reason: string;
+  yAxisSemanticType?: string;
+  yAxisUnit?: string;
 }
 
 function parseDateValue(value: string): number {
@@ -875,7 +877,9 @@ function generateSmartCharts(columns: ColumnInfo[], rows: Record<string, string>
           yAxis: numCol.name,
           data,
           priority,
-          reason: 'time_series'
+          reason: 'time_series',
+          yAxisSemanticType: numCol.semanticType,
+          yAxisUnit: numCol.unit
         });
       }
     }
@@ -917,7 +921,9 @@ function generateSmartCharts(columns: ColumnInfo[], rows: Record<string, string>
         yAxis: 'Value',
         data: aggregatedPeriodData,
         priority: 95,
-        reason: 'time_series'
+        reason: 'time_series',
+        yAxisSemanticType: valueCol?.semanticType,
+        yAxisUnit: valueCol?.unit
       });
     }
 
@@ -951,7 +957,9 @@ function generateSmartCharts(columns: ColumnInfo[], rows: Record<string, string>
           yAxis: 'Value',
           data: barData,
           priority: 90,
-          reason: 'category_breakdown'
+          reason: 'category_breakdown',
+          yAxisSemanticType: valueCol?.semanticType,
+          yAxisUnit: valueCol?.unit
         });
       }
     }
@@ -993,7 +1001,9 @@ function generateSmartCharts(columns: ColumnInfo[], rows: Record<string, string>
         yAxis: numericToAggregate.name,
         data,
         priority: isCurrency || isCount ? 85 : 60,
-        reason: 'category_breakdown'
+        reason: 'category_breakdown',
+        yAxisSemanticType: numericToAggregate.semanticType,
+        yAxisUnit: numericToAggregate.unit
       });
     }
   }
@@ -1087,6 +1097,35 @@ function generateSmartCharts(columns: ColumnInfo[], rows: Record<string, string>
     if (seenTypes.has(key)) continue;
     seenTypes.add(key);
 
+    // Calculate domain bounds with padding for better visibility
+    let domainMin: number | undefined;
+    let domainMax: number | undefined;
+    
+    if (candidate.yAxis && candidate.data.length > 0) {
+      const yValues = candidate.data
+        .map(d => typeof d[candidate.yAxis!] === 'number' ? d[candidate.yAxis!] as number : NaN)
+        .filter(v => !isNaN(v));
+      
+      if (yValues.length > 0) {
+        const min = Math.min(...yValues);
+        const max = Math.max(...yValues);
+        const range = max - min;
+        
+        // Add 10% padding to ensure bars/lines are visible
+        const padding = range > 0 ? range * 0.1 : Math.abs(max) * 0.1 || 1;
+        
+        // For bar charts with non-negative data, start from 0 for proper proportions
+        if ((candidate.type === 'bar' || candidate.type === 'histogram') && min >= 0) {
+          domainMin = 0;
+          domainMax = max + padding;
+        } else {
+          // For other charts or data with negative values, add padding on both ends
+          domainMin = min >= 0 ? Math.max(0, min - padding) : min - padding;
+          domainMax = max + padding;
+        }
+      }
+    }
+
     uniqueCharts.push({
       id: `chart-${chartId++}`,
       type: candidate.type,
@@ -1094,7 +1133,11 @@ function generateSmartCharts(columns: ColumnInfo[], rows: Record<string, string>
       xAxis: candidate.xAxis,
       yAxis: candidate.yAxis,
       data: candidate.data,
-      priority: candidate.priority
+      priority: candidate.priority,
+      yAxisSemanticType: candidate.yAxisSemanticType,
+      yAxisUnit: candidate.yAxisUnit,
+      domainMin,
+      domainMax
     });
   }
 

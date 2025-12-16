@@ -119,6 +119,10 @@ export const chartConfigSchema = z.object({
   yAxis: z.string().optional(),
   data: z.array(z.record(z.union([z.string(), z.number()]))),
   priority: z.number().optional(),
+  yAxisSemanticType: z.string().optional(),
+  yAxisUnit: z.string().optional(),
+  domainMin: z.number().optional(),
+  domainMax: z.number().optional(),
 });
 
 export type ChartConfig = z.infer<typeof chartConfigSchema>;

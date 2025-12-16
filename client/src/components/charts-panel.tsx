@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/tabs";
 import { BarChart3, TrendingUp, Circle, BarChart2, Download, X, Settings, AreaChartIcon, PieChartIcon, Sparkles, Crown } from "lucide-react";
 import { isProChartType, isChartTypeAllowed, isPaywallEnabled } from "@shared/tier-utils";
+import { formatAxisValue, formatTooltipValue, isCurrencyType } from "@shared/format-utils";
 import { ChartBuilder } from "./chart-builder";
 import type { ChartConfig, AnalysisResult } from "@shared/schema";
 
@@ -116,23 +117,34 @@ function getChartIcon(type: string) {
   }
 }
 
-function formatAxisValue(value: any): string {
-  if (typeof value === 'number') {
-    if (Math.abs(value) >= 1000000) {
-      return (value / 1000000).toFixed(1) + 'M';
-    }
-    if (Math.abs(value) >= 1000) {
-      return (value / 1000).toFixed(1) + 'K';
-    }
-    return value.toFixed(value % 1 === 0 ? 0 : 1);
-  }
-  if (typeof value === 'string' && value.length > 10) {
-    return value.slice(0, 10) + '...';
-  }
-  return String(value);
+function formatAxisLabel(value: any, semanticType?: string): string {
+  return formatAxisValue(value, semanticType);
 }
 
-function CustomTooltip({ active, payload, label }: any) {
+function createCustomTooltip(semanticType?: string) {
+  return function CustomTooltip({ active, payload, label }: any) {
+    if (!active || !payload || !payload.length) return null;
+
+    return (
+      <div className="bg-popover/95 backdrop-blur border border-border rounded-md px-3 py-2 shadow-lg">
+        <p className="text-xs font-medium mb-1.5 text-muted-foreground">{label}</p>
+        {payload.map((entry: any, index: number) => (
+          <div key={index} className="flex items-center gap-2 text-sm">
+            <div 
+              className="w-2 h-2 rounded-full" 
+              style={{ backgroundColor: entry.color }}
+            />
+            <span className="font-mono font-medium">
+              {formatTooltipValue(entry.value, semanticType)}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+}
+
+function DefaultTooltip({ active, payload, label }: any) {
   if (!active || !payload || !payload.length) return null;
 
   return (
@@ -144,7 +156,7 @@ function CustomTooltip({ active, payload, label }: any) {
             className="w-2 h-2 rounded-full" 
             style={{ backgroundColor: entry.color }}
           />
-          <span className="font-mono font-medium">{formatAxisValue(entry.value)}</span>
+          <span className="font-mono font-medium">{formatTooltipValue(entry.value)}</span>
         </div>
       ))}
     </div>
@@ -519,6 +531,8 @@ function LineChartComponent({ config, settings }: ChartComponentProps) {
   const yDomain = getYAxisDomain(settings);
   const scaleType = settings?.scaleType ?? 'linear';
   const bottomMargin = Math.abs(labelRotation) > 30 ? 40 : 0;
+  const semanticType = config.yAxisSemanticType;
+  const TooltipComponent = createCustomTooltip(semanticType);
   
   return (
     <ResponsiveContainer width="100%" height={220}>
@@ -527,19 +541,19 @@ function LineChartComponent({ config, settings }: ChartComponentProps) {
         <XAxis 
           dataKey={config.xAxis} 
           {...axisStyle} 
-          tickFormatter={formatAxisValue}
+          tickFormatter={(v) => formatAxisLabel(v)}
           angle={labelRotation}
           textAnchor={labelRotation > 0 ? 'start' : labelRotation < 0 ? 'end' : 'middle'}
           height={Math.abs(labelRotation) > 30 ? 60 : 30}
         />
         <YAxis 
           {...axisStyle} 
-          tickFormatter={formatAxisValue}
+          tickFormatter={(v) => formatAxisLabel(v, semanticType)}
           domain={yDomain}
           scale={scaleType}
           allowDataOverflow={scaleType === 'log'}
         />
-        <Tooltip content={<CustomTooltip />} />
+        <Tooltip content={<TooltipComponent />} />
         {showLegend && yAxes.length > 1 && <Legend />}
         {yAxes.map((yCol, idx) => (
           <Line 
@@ -570,6 +584,8 @@ function BarChartComponent({ config, settings }: ChartComponentProps) {
   const scaleType = settings?.scaleType ?? 'linear';
   const barWidth = settings?.barWidth ?? 80;
   const bottomMargin = Math.abs(labelRotation) > 30 ? 40 : 0;
+  const semanticType = config.yAxisSemanticType;
+  const TooltipComponent = createCustomTooltip(semanticType);
   
   return (
     <ResponsiveContainer width="100%" height={220}>
@@ -582,19 +598,19 @@ function BarChartComponent({ config, settings }: ChartComponentProps) {
         <XAxis 
           dataKey={config.xAxis} 
           {...axisStyle} 
-          tickFormatter={formatAxisValue}
+          tickFormatter={(v) => formatAxisLabel(v)}
           angle={labelRotation}
           textAnchor={labelRotation > 0 ? 'start' : labelRotation < 0 ? 'end' : 'middle'}
           height={Math.abs(labelRotation) > 30 ? 60 : 30}
         />
         <YAxis 
           {...axisStyle} 
-          tickFormatter={formatAxisValue}
+          tickFormatter={(v) => formatAxisLabel(v, semanticType)}
           domain={yDomain}
           scale={scaleType}
           allowDataOverflow={scaleType === 'log'}
         />
-        <Tooltip content={<CustomTooltip />} />
+        <Tooltip content={<TooltipComponent />} />
         {showLegend && yAxes.length > 1 && <Legend />}
         {yAxes.map((yCol, idx) => (
           <Bar 
@@ -621,6 +637,8 @@ function AreaChartComponent({ config, settings }: ChartComponentProps) {
   const yDomain = getYAxisDomain(settings);
   const scaleType = settings?.scaleType ?? 'linear';
   const bottomMargin = Math.abs(labelRotation) > 30 ? 40 : 0;
+  const semanticType = config.yAxisSemanticType;
+  const TooltipComponent = createCustomTooltip(semanticType);
   
   return (
     <ResponsiveContainer width="100%" height={220}>
@@ -629,19 +647,19 @@ function AreaChartComponent({ config, settings }: ChartComponentProps) {
         <XAxis 
           dataKey={config.xAxis} 
           {...axisStyle} 
-          tickFormatter={formatAxisValue}
+          tickFormatter={(v) => formatAxisLabel(v)}
           angle={labelRotation}
           textAnchor={labelRotation > 0 ? 'start' : labelRotation < 0 ? 'end' : 'middle'}
           height={Math.abs(labelRotation) > 30 ? 60 : 30}
         />
         <YAxis 
           {...axisStyle} 
-          tickFormatter={formatAxisValue}
+          tickFormatter={(v) => formatAxisLabel(v, semanticType)}
           domain={yDomain}
           scale={scaleType}
           allowDataOverflow={scaleType === 'log'}
         />
-        <Tooltip content={<CustomTooltip />} />
+        <Tooltip content={<TooltipComponent />} />
         {showLegend && yAxes.length > 1 && <Legend />}
         {yAxes.map((yCol, idx) => (
           <Area 
@@ -664,11 +682,13 @@ function PieChartComponent({ config, settings }: ChartComponentProps) {
   const showLegend = settings?.showLegend ?? true;
   const showDataLabels = settings?.showDataLabels ?? false;
   const yAxis = config.yAxis || 'count';
+  const semanticType = config.yAxisSemanticType;
+  const TooltipComponent = createCustomTooltip(semanticType);
   
   return (
     <ResponsiveContainer width="100%" height={220}>
       <PieChart>
-        <Tooltip content={<CustomTooltip />} />
+        <Tooltip content={<TooltipComponent />} />
         {showLegend && <Legend />}
         <Pie
           data={config.data}
@@ -677,7 +697,7 @@ function PieChartComponent({ config, settings }: ChartComponentProps) {
           cx="50%"
           cy="50%"
           outerRadius={80}
-          label={showDataLabels ? ({ name, value }) => `${name}: ${formatAxisValue(value)}` : false}
+          label={showDataLabels ? ({ name, value }) => `${name}: ${formatAxisLabel(value, semanticType)}` : false}
           labelLine={showDataLabels}
         >
           {config.data.map((_, index) => (
@@ -696,6 +716,8 @@ function ScatterChartComponent({ config, settings }: ChartComponentProps) {
   const yDomain = getYAxisDomain(settings);
   const scaleType = settings?.scaleType ?? 'linear';
   const bottomMargin = Math.abs(labelRotation) > 30 ? 40 : 0;
+  const semanticType = config.yAxisSemanticType;
+  const TooltipComponent = createCustomTooltip(semanticType);
   
   return (
     <ResponsiveContainer width="100%" height={220}>
@@ -706,7 +728,7 @@ function ScatterChartComponent({ config, settings }: ChartComponentProps) {
           type="number" 
           name={config.xAxis} 
           {...axisStyle} 
-          tickFormatter={formatAxisValue}
+          tickFormatter={(v) => formatAxisLabel(v)}
           angle={labelRotation}
           textAnchor={labelRotation > 0 ? 'start' : labelRotation < 0 ? 'end' : 'middle'}
           height={Math.abs(labelRotation) > 30 ? 60 : 30}
@@ -716,12 +738,12 @@ function ScatterChartComponent({ config, settings }: ChartComponentProps) {
           type="number" 
           name={config.yAxis || ''} 
           {...axisStyle} 
-          tickFormatter={formatAxisValue}
+          tickFormatter={(v) => formatAxisLabel(v, semanticType)}
           domain={yDomain}
           scale={scaleType}
           allowDataOverflow={scaleType === 'log'}
         />
-        <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3' }} />
+        <Tooltip content={<TooltipComponent />} cursor={{ strokeDasharray: '3 3' }} />
         <Scatter data={config.data} fill={colors[2]} />
       </ScatterChart>
     </ResponsiveContainer>
@@ -755,12 +777,12 @@ function HistogramComponent({ config, settings }: ChartComponentProps) {
         />
         <YAxis 
           {...axisStyle} 
-          tickFormatter={formatAxisValue}
+          tickFormatter={(v) => formatAxisLabel(v)}
           domain={yDomain}
           scale={scaleType}
           allowDataOverflow={scaleType === 'log'}
         />
-        <Tooltip content={<CustomTooltip />} />
+        <Tooltip content={<DefaultTooltip />} />
         <Bar dataKey="count" fill={colors[1]} radius={[3, 3, 0, 0]} name="Frequency">
           {showDataLabels && <LabelList dataKey="count" position="top" fontSize={10} />}
         </Bar>
